@@ -1,0 +1,64 @@
+.env
+# Node.js
+node_modules/
+.next/
+out/
+dist/
+build/
+.env.local
+.env.development.local
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Coverage
+coverage/
+.coverage
+htmlcov/
+
+# Database
+*.sqlite3
+*.db
+
+# Media and static
+media/
+static/
+public/uploads/
+
+# Dependencies
+package-lock.json
+yarn.lock
+poetry.lock
+
+# Distribution
+*.egg-info/
+dist/
+build/
+
+venv/

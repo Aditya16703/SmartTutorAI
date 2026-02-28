@@ -1,0 +1,21 @@
+[project]
+name = "training"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "langchain[google-genai]>=0.3.26",
+    "langchain-community>=0.3.26",
+    "python-dotenv>=1.1.1",
+    "langgraph>=0.5.0",
+    "duckduckgo-search>=8.0.5",
+    "supabase>=2.16.0",
+    "graphviz>=0.21",
+    "boto3>=1.39.3",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.29.5",
+]
