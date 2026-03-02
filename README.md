@@ -15,7 +15,7 @@
 <p align="center">
 
   <a href="#">
-    <img src="https://img.shields.io/badge/🚀_Live_Demo-Coming_Soon-22c55e?style=for-the-badge" />
+    <img src="https://img.shields.io/badge/_Live_Demo-Coming_Soon-22c55e?style=for-the-badge" />
   </a>
   <a href="#">
     <img src="https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js" />
@@ -37,12 +37,12 @@
 
 ---
 
-## ✨ Overview
+##  Overview
 
 **SmartTutorAI** is a next-generation AI learning platform that automatically generates a complete personalized learning environment from:
 
-- 📄 A raw topic  
-- 📚 An uploaded PDF  
+- A raw topic  
+- An uploaded PDF  
 
 Instead of passive reading, students get a **fully interactive AI learning experience**.
 
