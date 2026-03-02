@@ -1,7 +1,7 @@
 <!-- ======================= HERO ======================= -->
 
 <h1 align="center">
-  🧠 SmartTutorAI
+   SmartTutorAI
 </h1>
 
 <p align="center">
@@ -48,21 +48,21 @@ Instead of passive reading, students get a **fully interactive AI learning exper
 
 ---
 
-## 🔥 Key Highlights
+##  Key Highlights
 
-- 🧠 AI-generated structured summary notes  
-- 🧪 Interactive MCQ quizzes with explanations  
-- 🃏 Active-recall flashcards  
-- 🎧 Podcast-style audio learning  
-- 📚 AI-curated recommendations  
-- ⚡ LangGraph multi-node workflow  
-- 🔐 Secure authentication (Clerk)  
-- 🗄️ Supabase real-time persistence  
-- 🚀 Production-grade async architecture  
+- AI-generated structured summary notes  
+- Interactive MCQ quizzes with explanations  
+- Active-recall flashcards  
+- Podcast-style audio learning  
+- AI-curated recommendations  
+- LangGraph multi-node workflow  
+- Secure authentication (Clerk)  
+- Supabase real-time persistence  
+- Production-grade async architecture  
 
 ---
 
-## 🧩 Tech Stack
+##  Tech Stack
 
 <p align="center">
   <img src="https://skillicons.dev/icons?i=nextjs,react,ts,tailwind,python,fastapi,postgres,supabase" />
