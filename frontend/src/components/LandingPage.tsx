@@ -23,6 +23,7 @@ import {
   Languages,
   Heart,
   Lightbulb,
+  Layers,
 } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -70,6 +71,15 @@ export default function LandingPage() {
       gradient: "from-green-500 to-emerald-500",
       bg: "bg-green-500/10 dark:bg-green-500/20",
     },
+    {
+      icon: <Layers className="w-7 h-7" />,
+      title: "Active Flashcards",
+      description:
+        "Retain knowledge easily with AI-created spaced-repetition flashcards in your preferred language.",
+      color: "purple",
+      gradient: "from-purple-500 to-fuchsia-500",
+      bg: "bg-purple-500/10 dark:bg-purple-500/20",
+    },
   ];
 
   const stats = [
@@ -111,8 +121,24 @@ export default function LandingPage() {
     <div className="min-h-screen bg-background text-foreground overflow-hidden">
       {/* ─── Hero Section ──────────────────────────────────── */}
       <section className="relative pt-28 pb-20 px-4 hero-gradient">
-        {/* Animated background orbs */}
+        {/* Animated background orbs and Grid */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          {/* 3D Perspective Grid */}
+          <div className="absolute inset-0 pointer-events-none" style={{ perspective: "1000px" }}>
+            <div 
+              className="absolute inset-x-[-100%] top-0 h-[100%] w-[300%] opacity-40 dark:opacity-30"
+              style={{
+                backgroundImage: `linear-gradient(to right, rgba(139, 92, 246, 0.4) 1px, transparent 1px),
+                                  linear-gradient(to bottom, rgba(139, 92, 246, 0.4) 1px, transparent 1px)`,
+                backgroundSize: "60px 60px",
+                transform: "rotateX(75deg) translateY(-20%)",
+                transformOrigin: "center top",
+                maskImage: "linear-gradient(to bottom, black 0%, transparent 80%)",
+                WebkitMaskImage: "linear-gradient(to bottom, black 0%, transparent 80%)"
+              }} 
+            />
+          </div>
+          
           <motion.div
             animate={{
               scale: [1, 1.2, 1],
