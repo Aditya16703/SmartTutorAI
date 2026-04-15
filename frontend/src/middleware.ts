@@ -8,7 +8,12 @@ const isProtectedRoute = createRouteMatcher([
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
-  if (isProtectedRoute(req)) await auth.protect();
+  // E2E Test Bypass: Allows programmatic testing of protected routes
+  const isTestMode = process.env.NEXT_PUBLIC_TEST_MODE === "true";
+  
+  if (isProtectedRoute(req) && !isTestMode) {
+    await auth.protect();
+  }
 });
 
 export const config = {
