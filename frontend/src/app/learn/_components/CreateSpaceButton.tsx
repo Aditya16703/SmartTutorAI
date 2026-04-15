@@ -108,7 +108,7 @@ export default function CreateSpaceButton({
       <DialogTrigger asChild>
         <Button
           size="lg"
-          className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg"
+          className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-all font-bold hover:shadow-primary/30"
         >
           <svg
             className="w-5 h-5 mr-2"
@@ -294,7 +294,7 @@ export default function CreateSpaceButton({
             <Button
               type="submit"
               disabled={!topicName.trim() || isLoading}
-              className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-all font-bold"
             >
               {isLoading ? (
                 <>

@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { createClient } from "@/utils/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +14,7 @@ import {
   Target,
   RotateCcw,
 } from "lucide-react";
+import { handleUpdateXpAction } from "@/app/learn/actions/student-profile";
 
 interface Question {
   hint: string;
@@ -36,7 +38,7 @@ interface QuizSectionProps {
   quizData: QuizData;
 }
 
-export default function QuizSection({ quizData }: QuizSectionProps) {
+export default function QuizSection({ quizData, learningSpaceId, userId }: QuizSectionProps & { learningSpaceId?: string; userId?: string }) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
@@ -47,6 +49,36 @@ export default function QuizSection({ quizData }: QuizSectionProps) {
   const [startTime] = useState(Date.now());
   const [endTime, setEndTime] = useState<number | null>(null);
   const [showHint, setShowHint] = useState(false);
+  const attemptSaved = useRef(false);
+
+  // Save quiz attempt to Supabase when quiz completes
+  useEffect(() => {
+    if (!isQuizComplete || attemptSaved.current) return;
+    if (!learningSpaceId || !userId) return;
+    attemptSaved.current = true;
+
+    const results = calculateScore();
+    const supabase = createClient();
+    supabase
+      .from("quiz_attempts")
+      .insert({
+        user_id: userId,
+        learning_space_id: learningSpaceId,
+        score: results.correct,
+        total_questions: results.total,
+      })
+      .then(async ({ error }) => {
+        if (error) {
+            console.warn("Failed to save quiz attempt:", error.message);
+        } else {
+            // Reward Mastery XP: 50 XP per passed quiz (>80%), else 20 XP for attempt
+            const xpReward = results.percentage >= 80 ? 50 : 20;
+            await handleUpdateXpAction(userId, xpReward);
+            console.log(`[Mastery] Rewarded ${xpReward} XP for quiz completion.`);
+        }
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isQuizComplete]);
 
   const currentQuestion = quizData.questions[currentQuestionIndex];
   const isLastQuestion = currentQuestionIndex === quizData.questions.length - 1;
@@ -265,13 +297,25 @@ export default function QuizSection({ quizData }: QuizSectionProps) {
               </div>
             </div>
 
-            <Button
-              onClick={restartQuiz}
-              className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-lg shadow-green-500/25 py-3 text-base"
-            >
-              <RotateCcw className="w-4 h-4 mr-2" />
-              Retake Quiz
-            </Button>
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                onClick={restartQuiz}
+                variant="outline"
+                className="border-green-200 text-green-700 hover:bg-green-50 font-bold"
+              >
+                <RotateCcw className="w-4 h-4 mr-2" />
+                Retake Quiz
+              </Button>
+              <Button
+                asChild
+                className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-lg shadow-green-500/25 font-bold"
+              >
+                <Link href={`/learn/${learningSpaceId}`}>
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Back to Workspace
+                </Link>
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

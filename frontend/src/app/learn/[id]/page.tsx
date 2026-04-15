@@ -52,15 +52,15 @@ export default async function LearningSpacePage({ params }: PageProps) {
   const learningSpace = learningSpaces[0];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-950 dark:to-gray-900">
-      <div className="container mx-auto px-4 pt-24 pb-8">
+    <div className="min-h-screen bg-background relative overflow-hidden">
+      <div className="container mx-auto px-4 pt-24 pb-8 relative z-10">
         {/* Header */}
         <div className="mb-8">
           <BackToLearnButton />
 
           <div className="flex items-center gap-4 mb-6 justify-between">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+              <div className="w-12 h-12 bg-primary rounded-lg flex items-center justify-center shadow-md">
                 <svg
                   className="w-6 h-6 text-white"
                   fill="none"
@@ -76,10 +76,10 @@ export default async function LearningSpacePage({ params }: PageProps) {
                 </svg>
               </div>
               <div>
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                <h1 className="text-3xl font-bold text-foreground">
                   {learningSpace.topic || "Untitled Topic"}
                 </h1>
-                <p className="text-gray-600 dark:text-gray-400">
+                <p className="text-muted-foreground font-medium">
                   Created {formatDate(learningSpace.created_at)}
                 </p>
               </div>
@@ -110,11 +110,6 @@ export default async function LearningSpacePage({ params }: PageProps) {
 }
 
 // internal helper functions
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getSafeData(data: any, key: string, fallback: any = null) {
-  return data && data[key] !== undefined ? data[key] : fallback;
-}
-
 function formatDate(dateString: string | null | undefined) {
   if (!dateString) return "Recently";
   try {

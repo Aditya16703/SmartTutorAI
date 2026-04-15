@@ -27,7 +27,7 @@ interface LearningSpace {
 interface LearningSpacesManagerProps {
   userId: string;
   initialSpaces: LearningSpace[];
-  studentProfile?: any;
+  studentProfile?: { language?: string } | null;
 }
 
 
@@ -149,14 +149,10 @@ export default function LearningSpacesManager({
   );
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
-       {/* Background Elements */}
-       <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[100px]" />
-          <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-blue-500/5 rounded-full blur-[100px]" />
-       </div>
+    <div className="relative overflow-hidden w-full">
+       {/* Clean Background */}
 
-      <div className="max-w-7xl mx-auto pt-24 pb-12 px-4 relative z-10">
+      <div className="max-w-7xl mx-auto pb-12 px-4 relative z-10">
         {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
           <motion.div 

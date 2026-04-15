@@ -103,7 +103,7 @@ export default async function QuizPage({ params }: PageProps) {
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50 dark:from-gray-950 dark:to-gray-900">
       <div className="container mx-auto px-4 py-8">
         {/* UPDATE: Pass quizData instead of learningSpace.quiz */}
-        <QuizSection quizData={quizData} />
+        <QuizSection quizData={quizData} learningSpaceId={topicId} userId={user.id} />
       </div>
     </div>
   );

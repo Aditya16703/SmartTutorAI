@@ -8,6 +8,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useState } from "react";
+import { GraduationCap, BookOpen, Loader2 } from "lucide-react";
 
 interface RoleSelectorProps {
   onRoleSelect: (role: "teacher" | "student") => void;
@@ -28,7 +29,6 @@ export default function RoleSelector({
     setIsLoading(true);
 
     try {
-      // Call the parent component's handler
       await onRoleSelect(role);
     } catch (error) {
       console.error("Error selecting role:", error);
@@ -38,240 +38,104 @@ export default function RoleSelector({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 pt-8 pb-16 px-4">
-      <div className="max-w-4xl w-full mx-auto">
-        {/* Welcome Header */}
-        <div className="text-center mb-12">
-          <div className="mb-6">
-            <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg
-                className="w-10 h-10 text-white"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-                />
-              </svg>
+    <div className="min-h-screen bg-background relative overflow-hidden pt-12 pb-24 px-4 font-sans">
+      <div className="max-w-4xl w-full mx-auto relative z-10">
+        <div className="text-center mb-16">
+          <div className="mb-8">
+            <div className="w-24 h-24 bg-primary rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl rotate-3">
+              <BookOpen className="w-12 h-12 text-primary-foreground" />
             </div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">
-              Welcome to EduAI, {userFirstName}! 🎉
+            <h1 className="text-5xl font-black text-foreground mb-4 tracking-tight">
+              Welcome, {userFirstName}! 👋
             </h1>
-            <p className="text-lg text-gray-600">
-              Let&apos;s get you started with your personalized learning journey
+            <p className="text-xl text-muted-foreground font-bold max-w-lg mx-auto leading-relaxed">
+              To personalize your experience, please tell us how you&apos;ll be using the platform.
             </p>
           </div>
         </div>
 
-        {/* Role Selection Cards */}
-        <div className="grid md:grid-cols-2 gap-8 mb-8">
+        <div className="grid md:grid-cols-2 gap-10 mb-12">
           {/* Teacher Card */}
           <Card
-            className={`cursor-pointer transition-all duration-300 hover:shadow-lg border-2 ${
+            className={`group cursor-pointer transition-all duration-500 rounded-[2.5rem] p-4 border-4 overflow-hidden relative ${
               selectedRole === "teacher"
-                ? "border-blue-500 bg-blue-50"
-                : "border-gray-200 hover:border-blue-300"
+                ? "border-primary bg-primary/5 shadow-2xl"
+                : "border-border bg-card hover:border-primary/30 hover:shadow-xl hover:-translate-y-2"
             }`}
             onClick={() => !isLoading && handleRoleSelect("teacher")}
           >
-            <CardHeader className="text-center pb-4">
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg
-                  className="w-8 h-8 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-                  />
-                </svg>
+            <CardHeader className="text-center pb-6">
+              <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-500">
+                 <GraduationCap className="w-8 h-8 text-primary" />
               </div>
-              <CardTitle className="text-2xl font-semibold text-gray-800">
-                I&apos;m a Teacher
+              <CardTitle className="text-3xl font-black text-foreground mb-2">
+                Teacher
               </CardTitle>
-              <CardDescription className="text-gray-600">
-                Create courses, manage students, and track progress
+              <CardDescription className="text-muted-foreground font-bold text-base px-4">
+                Empower your classroom with AI-generated lesson plans and student insights.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center text-sm text-gray-600">
-                <svg
-                  className="w-4 h-4 mr-2 text-blue-500"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-                Create AI-powered lesson plans
-              </div>
-              <div className="flex items-center text-sm text-gray-600">
-                <svg
-                  className="w-4 h-4 mr-2 text-blue-500"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-                Track student performance
-              </div>
-              <div className="flex items-center text-sm text-gray-600">
-                <svg
-                  className="w-4 h-4 mr-2 text-blue-500"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-                Generate assessments automatically
-              </div>
+            <CardContent className="space-y-4 px-6 pb-8">
+               {[
+                 "Create AI Lesson Plans",
+                 "Monitor Student Growth",
+                 "Auto-Assessment Tools"
+               ].map((feature, i) => (
+                 <div key={i} className="flex items-center text-sm font-bold text-foreground/80 bg-primary/5 rounded-full px-4 py-2 border border-primary/10">
+                   <div className="w-2 h-2 rounded-full bg-primary mr-3" />
+                   {feature}
+                 </div>
+               ))}
             </CardContent>
           </Card>
 
           {/* Student Card */}
           <Card
-            className={`cursor-pointer transition-all duration-300 hover:shadow-lg border-2 ${
+            className={`group cursor-pointer transition-all duration-500 rounded-[2.5rem] p-4 border-4 overflow-hidden relative ${
               selectedRole === "student"
-                ? "border-purple-500 bg-purple-50"
-                : "border-gray-200 hover:border-purple-300"
+                ? "border-secondary bg-secondary/5 shadow-2xl"
+                : "border-border bg-card hover:border-secondary/30 hover:shadow-xl hover:-translate-y-2"
             }`}
             onClick={() => !isLoading && handleRoleSelect("student")}
           >
-            <CardHeader className="text-center pb-4">
-              <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg
-                  className="w-8 h-8 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-                  />
-                </svg>
+            <CardHeader className="text-center pb-6">
+              <div className="w-16 h-16 bg-secondary/10 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-500">
+                 <BookOpen className="w-8 h-8 text-secondary-foreground" />
               </div>
-              <CardTitle className="text-2xl font-semibold text-gray-800">
-                I&apos;m a Student
+              <CardTitle className="text-3xl font-black text-foreground mb-2">
+                Student
               </CardTitle>
-              <CardDescription className="text-gray-600">
-                Learn with AI-powered personalized content
+              <CardDescription className="text-muted-foreground font-bold text-base px-4">
+                Learn faster with personalized summaries, audio, and interactive quizzes.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center text-sm text-gray-600">
-                <svg
-                  className="w-4 h-4 mr-2 text-purple-500"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-                Personalized learning paths
-              </div>
-              <div className="flex items-center text-sm text-gray-600">
-                <svg
-                  className="w-4 h-4 mr-2 text-purple-500"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-                AI-powered tutoring
-              </div>
-              <div className="flex items-center text-sm text-gray-600">
-                <svg
-                  className="w-4 h-4 mr-2 text-purple-500"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-                Progress tracking & insights
-              </div>
+            <CardContent className="space-y-4 px-6 pb-8">
+               {[
+                 "Personalized Learning Path",
+                 "AI-Powered Tutoring",
+                 "Performance Inisghts"
+               ].map((feature, i) => (
+                 <div key={i} className="flex items-center text-sm font-bold text-foreground/80 bg-secondary/5 rounded-full px-4 py-2 border border-secondary/20">
+                   <div className="w-2 h-2 rounded-full bg-secondary-foreground mr-3" />
+                   {feature}
+                 </div>
+               ))}
             </CardContent>
           </Card>
         </div>
 
-        {/* Loading State */}
         {isLoading && (
-          <div className="text-center">
-            <div className="inline-flex items-center px-4 py-2 font-semibold leading-6 text-sm shadow rounded-md text-white bg-indigo-500 hover:bg-indigo-400 transition ease-in-out duration-150">
-              <svg
-                className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                ></circle>
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                ></path>
-              </svg>
-              Setting up your account...
+          <div className="flex justify-center mt-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="bg-primary px-8 py-4 rounded-full flex items-center gap-3 shadow-2xl text-primary-foreground font-black tracking-wide">
+              <Loader2 className="w-6 h-6 animate-spin" />
+              Setting up your workspace...
             </div>
           </div>
         )}
 
-        {/* Help Text */}
-        <div className="text-center mt-8 text-gray-500 text-sm">
+        <div className="text-center mt-16 text-muted-foreground font-bold text-sm bg-muted/30 py-4 px-8 rounded-full max-w-fit mx-auto border border-border">
           <p>
-            Don&apos;t worry, you can always change your role later in your
-            profile settings.
+            You can always change your focus later in your settings.
           </p>
         </div>
       </div>
