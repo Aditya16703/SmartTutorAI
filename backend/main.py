@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from src.api.routes.workflow import router as workflow_router
+from src.api.routes.doubt import router as doubt_router
+from src.api.routes.orchestrator import router as orchestrator_router
 
 app = FastAPI(
     title="Educational AI Agent Backend",
@@ -24,7 +26,9 @@ app.add_middleware(
 )
 
 # Include the workflow router from the src directory
-app.include_router(workflow_router, prefix="/api/workflow", tags=["workflow"])
+app.include_router(workflow_router, prefix="/api/workflows", tags=["workflow"])
+app.include_router(doubt_router, prefix="/api/doubt", tags=["doubt"])
+app.include_router(orchestrator_router, prefix="/api/orchestrator", tags=["orchestrator"])
 
 @app.get("/")
 async def root():

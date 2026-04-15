@@ -68,3 +68,21 @@ class Flashcard(BaseModel):
 
 class FlashcardList(BaseModel):
     flashcards: List[Flashcard] = Field(description="A list of 10-15 interactive flashcards")
+
+
+# ---- STRICT PRODUCTION PROTOCOL MODELS --------
+
+class FlashcardStrict(BaseModel):
+    question: str = Field(description="Clear and concise question")
+    answer: str = Field(description="Short answer (1-2 lines)")
+
+class FlashcardTask(BaseModel):
+    task: str = "flashcard"
+    data: List[FlashcardStrict]
+
+class AudioData(BaseModel):
+    text: str = Field(description="Clean, readable text for speech, no markdown/symbols")
+
+class AudioTask(BaseModel):
+    task: str = "audio"
+    data: AudioData

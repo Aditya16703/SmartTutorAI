@@ -10,3 +10,12 @@ duckduckgo-search
 graphviz
 boto3
 gtts
+langchain-openai
+openai
+# --- Multi-Model Routing ---
+langchain-groq
+langchain-mistralai
+mistralai
+groq
+elevenlabs
+httpx
