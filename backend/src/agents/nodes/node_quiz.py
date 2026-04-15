@@ -1,27 +1,21 @@
-
-# import modules
-import time
-
 import logging
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.chat_models import init_chat_model
+import json
 from langchain_core.prompts import ChatPromptTemplate
 from src.agents.state import AgentState
 from src.agents.output_structures import QuizOutput
 from src.services.supabase_service import supabase_service
+from src.utils.model_router import call_with_fallback
 
 # ---------------- Agent Node - Quiz ---------------
+# Primary model: DeepSeek  |  Fallback: Gemini Flash
+
 logger = logging.getLogger(__name__)
 
 
 def run_node_quiz(state: AgentState):
-    """LLM call to generate quiz based on summary content"""
+    """LLM call to generate quiz based on summary content (DeepSeek → Gemini fallback)."""
 
-    logger.info('node_quiz is running')
-
-    # generate the chat prompt
-
-    """Create a personalized prompt based on student profile"""
+    logger.info("node_quiz is running [primary: DeepSeek]")
 
     prompt_template = ChatPromptTemplate([
         ("system", """ 
@@ -47,14 +41,13 @@ def run_node_quiz(state: AgentState):
     # Robustly extract summary text from state
     summary_data = state.get("summary_notes")
     summary_text = ""
-    
+
     if summary_data:
         if isinstance(summary_data, str):
             try:
-                import json
                 parsed = json.loads(summary_data)
                 summary_text = parsed.get("summary", summary_data)
-            except:
+            except Exception:
                 summary_text = summary_data
         elif hasattr(summary_data, "summary"):
             summary_text = summary_data.summary
@@ -65,42 +58,33 @@ def run_node_quiz(state: AgentState):
         logger.warning("No summary notes found, falling back to topic for quiz generation")
         summary_text = state['user_prompt']['topic']
 
+    target_lang = state['student_profile'].get("language", "English")
+    logger.info(f"🎯 QUIZ NODE - Target language: '{target_lang}' | Primary: DeepSeek")
+
     try:
-        from src.utils.llm_utils import invoke_with_retry
-        
-        # Switched to 2.0-flash with low temperature for maximum speed
-        model = ChatGoogleGenerativeAI(model="gemini-flash-latest", temperature=0.1, max_retries=2).with_structured_output(QuizOutput)
-    
-        chain = prompt_template | model
-        
-        target_lang = state['student_profile'].get("language", "English")
-        logger.info(f"🎯 QUIZ NODE - Target language: '{target_lang}', Using gemini-flash-latest")
-    
-        response = invoke_with_retry(
-            chain.invoke,
-            {
+        response = call_with_fallback(
+            task="quiz",
+            chain_fn=lambda llm: prompt_template | llm,
+            input_data={
                 "grade_level": state['student_profile'].get("grade_level", "general"),
                 "language": target_lang,
                 "gender": state['student_profile'].get("gender", ""),
-                "topic_summary": summary_text 
+                "topic_summary": summary_text,
             },
-            max_retries=5,
-            initial_delay=2.0
+            structured_schema=QuizOutput,
+            temperature=0.1,
         )
-    
-        logger.info("Completed LLM response step")
-    
+
+        logger.info("Quiz generation completed")
         quiz_data = response.model_dump()
-        
-        # Update in supabase database
+
         supabase_service.update_learning_space(
-            state["learning_space_id"], 
+            state["learning_space_id"],
             {"quiz": quiz_data}
         )
-        
+
         return {"quiz": quiz_data}
 
     except Exception as e:
         logger.error(f"Failed to generate quiz: {e}")
-        # Return empty dict to preserve existing state instead of overwriting with None
         return {}

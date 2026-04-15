@@ -1,50 +1,50 @@
 import logging
-from langchain_google_genai import ChatGoogleGenerativeAI
+import json
 from langchain_core.prompts import ChatPromptTemplate
 from src.agents.state import AgentState
-from src.agents.output_structures import FlashcardList
+from src.agents.output_structures import FlashcardTask
 from src.services.supabase_service import supabase_service
+from src.utils.model_router import call_with_fallback
 
 # ------- Agent Node - Flashcards ---------------
+# Primary model: Mistral AI  |  Fallback: Gemini Flash
+
 logger = logging.getLogger(__name__)
 
-def run_node_flashcards(state: AgentState):
-    """LLM call to generate interactive flashcards based on summary content"""
 
-    logger.info('node_flashcards is running')
+def run_node_flashcards(state: AgentState):
+    """LLM call to generate interactive flashcards (Mistral AI → Gemini fallback)."""
+
+    logger.info("node_flashcards is running [primary: Mistral AI]")
 
     prompt_template = ChatPromptTemplate([
         ("system", """ 
-        You are a helpful academic tutor. Use these instructions to create a deck of interactive flashcards based on the notes provided by the user:
-        
-        Student Profile:
-            - Class Level: {grade_level}
-            - Language: {language} 
-            - Gender: {gender}
-        
-        Flashcard Requirements:
-        1. Create 10-15 high-quality flashcards.
-        2. Each card should have a 'front' (the question or term) and a 'back' (the answer or explanation).
-        3. The content should focus on active recall - testing the user's understanding of key concepts, dates, formulas, or definitions.
-        4. Clear and concise: The front should be a single question/term, and the back should be a crisp explanation.
-        5. Adapt the complexity based on the student's grade level.
-        6. Provide content in {language} ONLY. This is a CRITICAL REQUIREMENT. 
-        7. If the source material is in a different language, TRANSLATE EVERYTHING to {language}.
+        ## 📚 TASK: FLASHCARD
+        ### INPUT:
+        Text content on a topic: {topic_summary}
+
+        ### RULES:
+        * Generate 5–10 flashcards
+        * Questions must be clear and concise ('question' key)
+        * Answers must be short (1–2 lines) ('answer' key)
+        * NO extra text, NO explanations
+        * Output MUST be valid JSON wrapping data in a 'data' array
+        * Provide content in {language} ONLY. This is a CRITICAL REQUIREMENT. 
+        * Student Level: {grade_level}
         """),
-        ("user", "Topic Summary {topic_summary}. \n\nIMPORTANT: Generate the content in {language} ONLY.")
+        ("user", "Summarized Study Material: {topic_summary}. \n\nIMPORTANT: Generate content in {language} ONLY.")
     ])
 
     # Robustly extract summary text from state
     summary_data = state.get("summary_notes")
     summary_text = ""
-    
+
     if summary_data:
         if isinstance(summary_data, str):
             try:
-                import json
                 parsed = json.loads(summary_data)
                 summary_text = parsed.get("summary", summary_data)
-            except:
+            except Exception:
                 summary_text = summary_data
         elif hasattr(summary_data, "summary"):
             summary_text = summary_data.summary
@@ -55,37 +55,29 @@ def run_node_flashcards(state: AgentState):
         logger.warning("No summary notes found, falling back to topic for flashcards")
         summary_text = state['user_prompt']['topic']
 
+    target_lang = state['student_profile'].get("language", "English")
+    logger.info(f"🎯 FLASHCARDS NODE - Target language: '{target_lang}' | Primary: Mistral AI")
+
     try:
-        from src.utils.llm_utils import invoke_with_retry
-        
-        # High speed 2.0-flash with low temperature
-        model = ChatGoogleGenerativeAI(model="gemini-flash-latest", temperature=0.1, max_retries=2).with_structured_output(FlashcardList)
-    
-        chain = prompt_template | model
-        
-        target_lang = state['student_profile'].get("language", "English")
-        logger.info(f"🎯 FLASHCARDS NODE - Target language: '{target_lang}'")
-    
-        response = invoke_with_retry(
-            chain.invoke,
-            {
+        response = call_with_fallback(
+            task="flashcard",
+            chain_fn=lambda llm: prompt_template | llm,
+            input_data={
                 "grade_level": state['student_profile'].get("grade_level", "general"),
                 "language": target_lang,
-                "gender": state['student_profile'].get("gender", ""),
-                "topic_summary": summary_text 
+                "topic_summary": summary_text,
             },
-            max_retries=5,
-            initial_delay=2.0
+            structured_schema=FlashcardTask,
+            temperature=0.1,
         )
-    
+
         flashcards_data = response.model_dump()
-        
-        # Update in supabase database
+
         supabase_service.update_learning_space(
-            state["learning_space_id"], 
+            state["learning_space_id"],
             {"flashcards": flashcards_data}
         )
-        
+
         return {"flashcards": flashcards_data}
 
     except Exception as e:
