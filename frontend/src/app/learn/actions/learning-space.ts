@@ -104,7 +104,7 @@ export async function uploadSourceFileAction(
 
 export async function updateLearningSpaceAction(
   spaceId: string,
-  updates: Record<string, any>
+  updates: Record<string, unknown>
 ) {
   // Use service role client for updates
   const supabase = createServiceClient();

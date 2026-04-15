@@ -23,6 +23,7 @@ export const handleCreateProfileAction = async (
           gender: profileData.gender,
           language: profileData.language,
           user_id: profileData.userId,
+          xp: 0, // Initialize mastery XP
         },
       ])
       .select();
@@ -34,7 +35,35 @@ export const handleCreateProfileAction = async (
     }
   } catch (error) {
     console.error("Error creating student profile:", error);
-    // Handle error (maybe show a toast notification)
     return { error: "Internal server error" };
   }
 };
+
+export const handleUpdateXpAction = async (userId: string, amount: number) => {
+  "use server";
+  try {
+    const supabase = await createClient();
+    
+    // Fetch current XP
+    const { data: profile } = await supabase
+      .from("student_profile")
+      .select("xp")
+      .eq("user_id", userId)
+      .single();
+    
+    const currentXp = (profile as any)?.xp || 0;
+    const newXp = currentXp + amount;
+
+    const { error } = await supabase
+      .from("student_profile")
+      .update({ xp: newXp, updated_at: new Date().toISOString() })
+      .eq("user_id", userId);
+
+    if (error) throw error;
+    return { success: true, newXp };
+  } catch (error) {
+    console.error("Error updating XP:", error);
+    return { error: "Failed to update mastery XP" };
+  }
+};
+
