@@ -68,7 +68,7 @@ export default function AudioOverview({
         // Reload the page to show the new audio
         window.location.reload();
       }
-    } catch (err) {
+    } catch {
       toast.error("Audio generation failed", {
         description: "An unexpected error occurred. Please try again.",
       });
@@ -113,31 +113,29 @@ export default function AudioOverview({
   };
 
   return (
-    <Card className="bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950/30 dark:to-amber-950/30 border-orange-200 dark:border-orange-900 shadow-sm overflow-hidden">
+    <Card className="bg-card border-border shadow-sm overflow-hidden">
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-amber-600 rounded-lg flex items-center justify-center">
-              <Volume2 className="w-4 h-4 text-white" />
+            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+              <Volume2 className="w-4 h-4 text-primary-foreground" />
             </div>
-            <span className="text-gray-900 dark:text-orange-100">Audio Overview</span>
+            <span className="text-foreground">Audio Overview</span>
           </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {hasAudio ? (
           <>
-            {/* Hidden Audio Element */}
             <audio ref={audioRef} src={audio_overview || undefined} preload="metadata" />
 
-            {/* Audio Player Section */}
-            <div className="bg-white dark:bg-orange-950/20 rounded-lg p-4 border border-orange-200 dark:border-orange-800">
+            <div className="bg-primary/5 rounded-lg p-4 border border-primary/20">
               <div className="flex items-center gap-4">
                 <Button
                   onClick={togglePlayback}
                   disabled={isLoading}
                   size="lg"
-                  className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-full w-12 h-12 p-0 border-0 shadow-md"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-full w-12 h-12 p-0 border-0 shadow-md"
                 >
                   {isLoading ? (
                     <RefreshCw className="w-4 h-4 animate-spin" />
@@ -150,21 +148,20 @@ export default function AudioOverview({
 
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700 dark:text-orange-200">
+                    <span className="text-sm font-bold text-foreground">
                       Learning Overview Audio
                     </span>
-                    <span className="text-xs text-gray-500 dark:text-orange-300/70">
+                    <span className="text-xs text-muted-foreground font-medium">
                       {formatTime(currentTime)} / {formatTime(duration)}
                     </span>
                   </div>
 
-                  {/* Progress Bar */}
                   <div
-                    className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 cursor-pointer"
+                    className="w-full bg-muted rounded-full h-2 cursor-pointer"
                     onClick={handleProgressClick}
                   >
                     <div
-                      className="bg-gradient-to-r from-orange-500 to-amber-600 h-2 rounded-full transition-all duration-300"
+                      className="bg-primary h-2 rounded-full transition-all duration-300"
                       style={{
                         width:
                           duration > 0
@@ -177,20 +174,18 @@ export default function AudioOverview({
               </div>
             </div>
 
-            {/* Audio Info */}
-            <div className="bg-white dark:bg-orange-950/20 rounded-lg p-3 border border-orange-200 dark:border-orange-800">
-              <p className="text-sm text-gray-600 dark:text-orange-200/80">
+            <div className="bg-background rounded-lg p-3 border border-border">
+              <p className="text-sm text-muted-foreground font-medium">
                 🎯 AI-generated audio summary covering key concepts, important
-                points, and learning objectives from your materials.
+                points, and learning objectives.
               </p>
             </div>
 
-            {/* Regenerate Button */}
             <Button
               onClick={handleGenerateAudio}
               disabled={isGenerating}
               variant="outline"
-              className="w-full border-orange-200 dark:border-orange-800 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/30"
+              className="w-full border-primary/20 text-primary hover:bg-primary/5 font-bold"
             >
               {isGenerating ? (
                 <>
@@ -206,43 +201,39 @@ export default function AudioOverview({
             </Button>
           </>
         ) : (
-          <>
-            {/* No Audio State */}
-            <div className="text-center py-8 bg-white dark:bg-orange-950/10 rounded-lg border border-dashed border-orange-200 dark:border-orange-800">
-              <div className="w-16 h-16 bg-gradient-to-br from-orange-100 to-amber-100 dark:from-orange-900/40 dark:to-amber-900/40 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Volume2 className="w-8 h-8 text-orange-500 dark:text-orange-400" />
-              </div>
-
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-orange-100 mb-2">
-                No Audio Overview Yet
-              </h3>
-
-              <p className="text-gray-600 dark:text-orange-200/80 mb-6 max-w-sm mx-auto">
-                Generate an AI-powered audio summary of your learning materials
-                to listen on the go.
-              </p>
-
-              <Button
-                onClick={handleGenerateAudio}
-                disabled={isGenerating}
-                size="lg"
-                className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white shadow-lg border-0"
-              >
-                {isGenerating ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    Generating Audio...
-                  </>
-                ) : (
-                  <>
-                    <Volume2 className="w-4 h-4 mr-2" />
-                    Generate Audio Overview
-                  </>
-                )}
-              </Button>
-              {isGenerating && <GenerationTimer />}
+          <div className="text-center py-8 bg-primary/5 rounded-lg border border-dashed border-primary/20">
+            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Volume2 className="w-8 h-8 text-primary" />
             </div>
-          </>
+
+            <h3 className="text-lg font-bold text-foreground mb-2">
+              No Audio Overview Yet
+            </h3>
+
+            <p className="text-muted-foreground font-medium mb-6 max-w-sm mx-auto">
+              Generate an AI-powered audio summary to listen on the go.
+            </p>
+
+            <Button
+              onClick={handleGenerateAudio}
+              disabled={isGenerating}
+              size="lg"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-all font-bold"
+            >
+              {isGenerating ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Generating Audio...
+                </>
+              ) : (
+                <>
+                  <Volume2 className="w-4 h-4 mr-2" />
+                  Generate Audio Overview
+                </>
+              )}
+            </Button>
+            {isGenerating && <GenerationTimer />}
+          </div>
         )}
       </CardContent>
     </Card>

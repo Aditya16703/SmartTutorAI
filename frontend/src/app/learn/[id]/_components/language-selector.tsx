@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/select";
 import { Globe, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { createClient } from "@/utils/supabase/client";
 import { updateLearningSpaceAction, clearLearningSpaceContentAction, invokeAgentWorkflow } from "../../actions/learning-space";
 
 interface LanguageSelectorProps {

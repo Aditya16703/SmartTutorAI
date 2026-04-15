@@ -7,67 +7,68 @@ import Recommendations from "./recommendations";
 import UploadedSources from "./sources";
 import AudioOverview from "./audio-overview";
 import Quiz from "./quiz";
+import DoubtSolver from "./doubt-solver";
 import { useLearningSpaceRealtime } from "./use-learning-space-realtime";
-import { AlertCircle, RefreshCcw, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { WifiOff, RefreshCw } from "lucide-react";
+
+interface LearningSpace {
+  id: string;
+  summary_notes?: string | null;
+  flashcards?: unknown | null;
+  recommendations?: unknown | null;
+  quiz?: unknown | null;
+  audio_overview?: unknown | null;
+  file_url?: string | null;
+  language?: string;
+}
+
+interface User {
+  id: string;
+  name?: string;
+  email?: string;
+}
 
 interface LearningSpaceContentProps {
-  learningSpace: any;
-  user: any;
+  learningSpace: LearningSpace;
+  user: User;
 }
 
 export default function LearningSpaceContent({
   learningSpace: initialSpace,
   user,
 }: LearningSpaceContentProps) {
-  const { lastUpdate, connectionStatus, errorDetails } = useLearningSpaceRealtime(
+  const { lastUpdate, connectionStatus, reconnect } = useLearningSpaceRealtime(
     initialSpace.id
   );
 
   // Merge initial data with realtime updates
   const learningSpace = lastUpdate ? { ...initialSpace, ...lastUpdate } : initialSpace;
 
-  if (connectionStatus === "error") {
-    return (
-      <div className="space-y-6">
-        <div className="bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900 border p-4 rounded-lg flex gap-3">
-          <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
-          <div className="flex-1 space-y-3 text-red-900 dark:text-red-200">
-            <h3 className="font-semibold text-lg">Connection Error</h3>
-            <div className="text-sm">
-              <p>
-                We&apos;re having trouble connecting to the live update service (Realtime). 
-                {errorDetails && <span className="block mt-1 font-mono text-xs opacity-70">{errorDetails}</span>}
-              </p>
-              <div className="flex items-center gap-3 mt-4">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => window.location.reload()}
-                  className="bg-white hover:bg-red-50 text-red-600 border-red-200 shadow-sm"
-                >
-                  <RefreshCcw className="w-3 h-3 mr-2" />
-                  Refresh Page
-                </Button>
-                <p className="text-xs text-red-700/70 dark:text-red-400/70 italic">
-                  Tip: Check if &quot;Realtime&quot; is enabled in your Supabase Dashboard.
-                </p>
-              </div>
-            </div>
+  return (
+    <div className="flex flex-col space-y-4">
+      {connectionStatus === "error" && (
+        <div className="bg-red-50 border border-red-100 text-red-600 px-4 py-3 rounded-lg flex items-center justify-between text-sm shadow-sm backdrop-blur-sm">
+          <div className="flex items-center gap-2">
+            <WifiOff className="w-4 h-4" />
+            <span>Connection to AI updates lost. Some content might not load automatically.</span>
           </div>
+          <button 
+            onClick={reconnect}
+            className="flex items-center gap-1.5 font-medium hover:text-red-700 transition-colors px-3 py-1 rounded-md hover:bg-red-100/50"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Reconnect
+          </button>
         </div>
-
-        <MainGrid learningSpace={learningSpace} user={user} />
-      </div>
-    );
-  }
-
-  return <MainGrid learningSpace={learningSpace} user={user} />;
+      )}
+      <MainGrid learningSpace={learningSpace} user={user} />
+    </div>
+  );
 }
 
-function MainGrid({ learningSpace, user }: { learningSpace: any; user: any }) {
+function MainGrid({ learningSpace, user }: { learningSpace: LearningSpace; user: User }) {
   // Safe data access helper
-  const getSafeData = (data: any, key: string, fallback: any = null) => {
+  const getSafeData = (data: LearningSpace, key: keyof LearningSpace, fallback: unknown = null) => {
     return data && data[key] !== undefined ? data[key] : fallback;
   };
 
@@ -82,6 +83,7 @@ function MainGrid({ learningSpace, user }: { learningSpace: any; user: any }) {
           learningSpaceId={learningSpace.id}
           userId={user.id}
           summaryNotes={getSafeData(learningSpace, "summary_notes")}
+          fileUrl={getSafeData(learningSpace, "file_url")}
           language={language}
         />
 
@@ -119,6 +121,12 @@ function MainGrid({ learningSpace, user }: { learningSpace: any; user: any }) {
           learningSpaceId={learningSpace.id} 
           userId={user.id} 
           quiz={getSafeData(learningSpace, "quiz")}
+          language={language}
+        />
+
+        <DoubtSolver
+          learningSpaceId={learningSpace.id}
+          userId={user.id}
           language={language}
         />
       </div>
