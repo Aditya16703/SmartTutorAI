@@ -25,12 +25,15 @@ class WorkflowRequest(BaseModel):
 
 # --- JOB MANAGEMENT ---
 class JobManager:
-    """Manages background jobs to allow cancellation and prioritization."""
+    """Manages background jobs to allow cancellation and prioritize/limit concurrency."""
+    MAX_CONCURRENT_JOBS_PER_USER = 2
+
     def __init__(self):
         self.active_user_jobs = {} # {user_id: [cancel_flag_list]}
+        self.active_invokes = {}   # {user_id: count}
 
     def register_user_job(self, user_id: str):
-        """Registers a cancelable flag for a user. returns the flag."""
+        """Registers a cancelable flag for a user (bulk jobs). returns the flag."""
         cancel_flag = {"cancelled": False}
         if user_id not in self.active_user_jobs:
             self.active_user_jobs[user_id] = []
@@ -40,10 +43,22 @@ class JobManager:
     def cancel_all_user_jobs(self, user_id: str):
         """Cancels all currently running background jobs for a user."""
         if user_id in self.active_user_jobs:
-            logger.info(f"🛑 Cancelling {len(self.active_user_jobs[user_id])} jobs for user {user_id}")
+            logger.info(f"🛑 Cancelling {len(self.active_user_jobs[user_id])} bulk jobs for user {user_id}")
             for flag in self.active_user_jobs[user_id]:
                 flag["cancelled"] = True
             self.active_user_jobs[user_id] = []
+
+    def can_start_invoke(self, user_id: str) -> bool:
+        """Check if user has reached the max concurrent individual jobs."""
+        count = self.active_invokes.get(user_id, 0)
+        return count < self.MAX_CONCURRENT_JOBS_PER_USER
+
+    def register_invoke(self, user_id: str):
+        self.active_invokes[user_id] = self.active_invokes.get(user_id, 0) + 1
+
+    def unregister_invoke(self, user_id: str):
+        if user_id in self.active_invokes and self.active_invokes[user_id] > 0:
+            self.active_invokes[user_id] -= 1
 
 job_manager = JobManager()
 
@@ -56,15 +71,30 @@ async def workflow_status(workflow_id: str):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+def _invoke_with_tracking(learning_space_id: str, user_id: str, language: str | None):
+    try:
+        invoke_agent_workflow(learning_space_id, user_id, language)
+    finally:
+        job_manager.unregister_invoke(user_id)
+
 @router.post("/invoke")
 async def workflow_invoke(request: WorkflowRequest, background_tasks: BackgroundTasks):
     try:
         # 1. Cancel any background bulk regenerations for this user to prioritize this space
         job_manager.cancel_all_user_jobs(request.user_id)
         
-        # 2. Invoke the workflow
+        # 2. Check concurrency limit
+        if not job_manager.can_start_invoke(request.user_id):
+            raise HTTPException(
+                status_code=429, 
+                detail="You have too many AI generations running simultaneously. Please wait for them to finish."
+            )
+        
+        job_manager.register_invoke(request.user_id)
+
+        # 3. Invoke the workflow
         background_tasks.add_task(
-            invoke_agent_workflow, request.learning_space_id, request.user_id, request.language)
+            _invoke_with_tracking, request.learning_space_id, request.user_id, request.language)
         
         return {"message": "Workflow started successfully.", "learning_space_id": request.learning_space_id}
     except Exception as e:
@@ -179,15 +209,12 @@ async def audio_summary(request: WorkflowRequest):
                     "success": False
                 }
 
-            # Generate audio script on-demand using LLM
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            from langchain_core.prompts import ChatPromptTemplate
-            from src.agents.output_structures import PodcastContent
-            from src.utils.llm_utils import invoke_with_retry
-
+            # Sanitize and limit context length for LLM stability
+            context_summary = summary_notes[:15000] # Safety limit
+            
             target_lang = request.language or (student_profile or {}).get("language", "English")
             grade_level = (student_profile or {}).get("grade_level", "general")
-            gender = (student_profile or {}).get("gender", "")
+            gender = (student_profile or {}).get("gender", "neutral")
 
             prompt_template = ChatPromptTemplate([
                 ("system", """
@@ -195,40 +222,43 @@ async def audio_summary(request: WorkflowRequest):
 
                     Student Profile:
                     - Class Level: {grade_level}
-                    - Target Language: {language} (Provide content in this language.)
+                    - Target Language: {language}
                     - Preferred Pronouns: {gender}
 
-                    Podcast Content Requirements:
-                    1. Comprehensive Summary: Generate a detailed and well-structured summary of the user-provided topic within a 3000 character limit.
-                    2. Academic Appropriateness: Tailor the depth, complexity, and vocabulary to the specified {grade_level}.
-                    3. Engaging Delivery Style: Write in a conversational, accessible, and enthusiastic tone.
-                    4. Structure: Introduction, Main Content, Key Takeaways, and Call to Action.
-                    5. Strictly use the 3000 characters limit.
-                    6. Provide content in {language} only.
-                    7. If the source material is in a different language, TRANSLATE the content to {language}.
+                    Requirements:
+                    1. Generate a conversational podcast-style script.
+                    2. Tone: Enthusiastic, clear, and academic.
+                    3. Structure: Intro, Content, Key takeaways, Outro.
+                    4. Provide content in {language} only.
                 """),
-                ("user",
-                 "Create a audio summary for the topic summary: {topic_summary}. \n\nIMPORTANT: Generate the script in {language} ONLY.")
+                ("user", "Create an audio summary for: {topic_summary}. Respond in {language} ONLY.")
             ])
 
             model = ChatGoogleGenerativeAI(
-                model="gemini-flash-latest", temperature=0.2, max_retries=3
+                model="gemini-flash-latest", 
+                temperature=0.2, 
+                max_retries=3
             ).with_structured_output(PodcastContent)
 
             chain = prompt_template | model
-            response = invoke_with_retry(
-                chain.invoke,
-                {
-                    "grade_level": grade_level,
-                    "language": target_lang,
-                    "gender": gender,
-                    "topic_summary": summary_notes,
-                },
-                max_retries=5,
-                initial_delay=2.0
-            )
-
-            audio_script = response.script.replace("*", "").replace("#", "").replace("**", "")
+            try:
+                response = invoke_with_retry(
+                    chain.invoke,
+                    {
+                        "grade_level": grade_level,
+                        "language": target_lang,
+                        "gender": gender,
+                        "topic_summary": context_summary,
+                    },
+                    max_retries=3
+                )
+                audio_script = response.script.replace("*", "").replace("#", "").replace("**", "")
+            except Exception as script_err:
+                logger.error(f"Failed to generate audio script: {script_err}")
+                return {
+                    "success": False,
+                    "message": "Failed to generate audio script. Please try again in a moment."
+                }
 
             # Save the generated script to the database
             supabase_service.update_learning_space(
