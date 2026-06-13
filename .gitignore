@@ -62,3 +62,13 @@ dist/
 build/
 
 venv/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# Local Scratch / Playground folders
+**/scratch/
+
+# OS specific files
+Thumbs.db
+desktop.ini

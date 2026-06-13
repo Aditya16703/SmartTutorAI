@@ -7,7 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { SignUpButton, SignInButton, SignedIn, SignedOut } from "@clerk/nextjs";
+import { SignUpButton, SignInButton, SignedIn, SignedOut, useUser } from "@clerk/nextjs";
 import {
   BadgeCheck,
   Music,
@@ -30,6 +30,7 @@ import { ModeToggle } from "@/components/mode-toggle";
 import Image from "next/image";
 
 export default function LandingPage() {
+  const { user, isSignedIn } = useUser();
   const container = {
     hidden: { opacity: 0 },
     show: {
@@ -109,7 +110,7 @@ export default function LandingPage() {
           <BookOpen className="w-6 h-6 fill-primary-foreground text-secondary" />
           <span className="font-extrabold tracking-wide text-lg text-primary-foreground">EduAI</span>
           <div className="ml-auto flex items-center gap-4 md:gap-6">
-             <Link href="/about" className="hidden md:block text-sm font-bold hover:text-secondary transition-colors text-primary-foreground">Our Story</Link>
+             <Link href="/about" className="hidden md:block text-sm font-bold hover:text-secondary transition-colors text-primary-foreground">About</Link>
              <Link href="/process" className="hidden md:block text-sm font-bold hover:text-secondary transition-colors text-primary-foreground">How It Works</Link>
              <div className="flex items-center gap-2">
                 <ModeToggle />
@@ -162,13 +163,24 @@ export default function LandingPage() {
               </div>
 
               <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 leading-[1.1] text-foreground">
-                Education for <br />
-                <span className="text-primary">Every Child.</span>
+                {isSignedIn ? (
+                  <>
+                    Welcome back, <br />
+                    <span className="text-primary">{user?.firstName || "Student"}!</span>
+                  </>
+                ) : (
+                  <>
+                    Education for <br />
+                    <span className="text-primary">Every Child.</span>
+                  </>
+                )}
               </h1>
 
               <p className="text-xl text-muted-foreground max-w-lg mb-10 leading-relaxed font-medium">
-                Bringing world-class AI learning to every village in India.
-                Learn in your own language, at your own pace, with complete ease.
+                {isSignedIn 
+                  ? "Great to see you again! Your personalized learning dashboard is ready. Continue mastering your subjects with AI."
+                  : "Bringing world-class AI learning to every village in India. Learn in your own language, at your own pace, with complete ease."
+                }
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4 mb-10">
@@ -201,7 +213,7 @@ export default function LandingPage() {
                     size="lg"
                     className="px-8 h-14 text-lg rounded-xl border-2 border-primary text-primary hover:bg-accent hover:text-primary transition-all font-bold bg-background"
                   >
-                    Our Story
+                    About
                   </Button>
                 </Link>
               </div>
@@ -462,9 +474,14 @@ export default function LandingPage() {
                <span className="block mt-2 text-sm not-italic font-black text-primary">— Rabindranath Tagore</span>
             </p>
             <div className="w-12 h-1.5 bg-secondary rounded-full mb-8" />
-            <p className="text-sm font-bold text-muted-foreground flex items-center gap-1.5 uppercase tracking-widest">
-              Made with <Heart className="w-4 h-4 text-primary fill-primary" /> for India
-            </p>
+            <div className="flex flex-col items-center gap-2">
+              <p className="text-sm font-bold text-muted-foreground flex items-center gap-1.5 uppercase tracking-widest text-center flex-wrap justify-center">
+                Made with <Heart className="w-4 h-4 text-primary fill-primary" /> for India by <span className="text-foreground whitespace-nowrap">{"A"}{"d"}{"i"}{"t"}{"y"}{"a"}{" "}{"S"}{"i"}{"n"}{"g"}{"h"}{" "}{"C"}{"h"}{"a"}{"u"}{"h"}{"a"}{"n"}</span>
+              </p>
+              <div className="text-[10px] text-muted-foreground/40 mt-1 uppercase tracking-[0.2em] font-medium selection:bg-transparent cursor-default pointer-events-none text-center">
+                 <span>{"\u0044"}{"\u0045"}{"\u0056"}{"\u0045"}{"\u004c"}{"\u004f"}{"\u0050"}{"\u0045"}{"\u0044"}&nbsp;{"\u0042"}{"\u0059"}&nbsp;{"\u0041"}{"\u0044"}{"\u0049"}{"\u0054"}{"\u0059"}{"\u0041"}&nbsp;{"\u0053"}{"\u0049"}{"\u004e"}{"\u0047"}{"\u0048"}&nbsp;{"\u0043"}{"\u0048"}{"\u0041"}{"\u0055"}{"\u0048"}{"\u0041"}{"\u004e"}</span>
+              </div>
+            </div>
           </div>
         </div>
       </footer>

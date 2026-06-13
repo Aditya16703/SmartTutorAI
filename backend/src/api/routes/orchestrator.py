@@ -24,6 +24,9 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from src.services.supabase_service import supabase_service
 from src.utils.model_router import call_with_fallback, TASK_MODEL_MAP
+from src.agents.output_structures import (
+    SummaryNoteOutput, QuizOutput, FlashcardList, RecommendationList
+)
 
 # Cache versioning: Incrementing this forces a full cache refresh
 VERSION_ID = "v2" 

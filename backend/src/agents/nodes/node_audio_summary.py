@@ -27,7 +27,7 @@ def run_node_audio_overview(state: AgentState):
         * Text must be clean and natural for speech
         * Remove symbols, markdown, emojis, asterisks (*), hashtags (#)
         * Keep sentences short and clear
-        * Output MUST be valid JSON: {"task": "audio", "data": {"text": "..."}}
+        * Output MUST be valid JSON: {{ "task": "audio", "data": {{ "text": "..." }} }}
         * Provide content in {language} ONLY. 
         * Academic Level: {grade_level}
         """),

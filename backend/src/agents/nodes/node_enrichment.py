@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 def run_node_enrichment(state: AgentState):
     """Background task to enrich the summary with visual context/diagrams."""
     
-    url = state['user_prompt'].get('file_url', '').strip()
+    url = (state['user_prompt'].get('file_url') or '').strip()
     if not url or "youtube.com" in url or "youtu.be" in url:
         logger.info("Skipping visual enrichment (No PDF detected).")
         return {}

@@ -25,11 +25,11 @@ def run_node_summary_notes(state: AgentState):
     # Build human message content dynamically
     user_content = [
         {"type": "text",
-         "text": f"Topic: {state['user_prompt']['topic']}. \n\nIMPORTANT: Generate the summary in {target_lang} ONLY."}
+         "text": "Topic: " + str(state['user_prompt']['topic']) + ". \n\nIMPORTANT: Generate the summary in " + str(target_lang) + " ONLY."}
     ]
 
     # Extract text FAST if URL exists
-    url = state['user_prompt'].get('file_url', '').strip()
+    url = (state['user_prompt'].get('file_url') or '').strip()
     extracted_content = ""
 
     if url:
@@ -95,13 +95,29 @@ def run_node_summary_notes(state: AgentState):
 
         logger.info(f"Summary generated in {target_lang}")
 
-        supabase_service.update_learning_space(
-            state["learning_space_id"],
-            {"summary_notes": response.model_dump()}
-        )
+        # Robustly extract summary text from response (handle both dict and object)
+        summary_text = ""
+        if isinstance(response, dict):
+            summary_text = response.get("summary", "")
+        elif hasattr(response, "summary"):
+            summary_text = response.summary
+        else:
+            summary_text = str(response)
+
+        logger.info(f"Summary text extracted, length: {len(summary_text)}")
+
+        # Save the summary notes as RAW TEXT to ensure DB compatibility
+        if summary_text:
+            supabase_service.update_learning_space(
+                state["learning_space_id"],
+                {"summary_notes": summary_text}
+            )
+            logger.info("✅ Summary notes saved to database")
+        else:
+            logger.warning("⚠️ No summary text found to save")
 
         return {
-            "summary_notes": response,
+            "summary_notes": summary_text,
             "raw_source_text": extracted_content
         }
 

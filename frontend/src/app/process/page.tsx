@@ -1,10 +1,12 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { BookOpen, Sparkles, NotebookText, Music, BadgeCheck, Layers, FileText, ArrowDown, ArrowRight } from "lucide-react";
+import { BookOpen, Sparkles, NotebookText, Music, BadgeCheck, Layers, FileText, ArrowDown, ArrowRight, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
+import { SignUpButton, SignInButton, SignedIn, SignedOut } from "@clerk/nextjs";
+import { ModeToggle } from "@/components/mode-toggle";
 
 export default function ProcessPage() {
   const steps = [
@@ -54,9 +56,22 @@ export default function ProcessPage() {
             <BookOpen className="w-6 h-6 fill-primary-foreground text-secondary" />
             <span className="font-extrabold tracking-wide text-lg text-primary-foreground">EduAI</span>
           </Link>
-          <div className="ml-auto flex items-center gap-6">
+          <div className="ml-auto flex items-center gap-4 md:gap-6">
              <Link href="/" className="hidden md:block text-sm font-bold hover:text-secondary transition-colors text-primary-foreground">Home</Link>
-             <Link href="/about" className="hidden md:block text-sm font-bold hover:text-secondary transition-colors text-primary-foreground">Our Story</Link>
+             <Link href="/about" className="hidden md:block text-sm font-bold hover:text-secondary transition-colors text-primary-foreground">About</Link>
+             <div className="flex items-center gap-2">
+                <ModeToggle />
+                <SignedOut>
+                   <SignInButton>
+                     <button className="text-sm font-bold hover:text-secondary transition-colors py-2 px-4 rounded-lg hover:bg-black/10 text-primary-foreground">Login</button>
+                   </SignInButton>
+                </SignedOut>
+                <SignedIn>
+                   <Link href="/learn" className="text-sm font-bold hover:text-secondary transition-colors flex items-center gap-1 bg-white/10 py-2 px-4 rounded-lg text-primary-foreground">
+                      Dashboard <ChevronRight className="w-4 h-4" />
+                   </Link>
+                </SignedIn>
+             </div>
           </div>
         </div>
       </div>

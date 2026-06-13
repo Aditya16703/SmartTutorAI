@@ -8,6 +8,11 @@ from src.services.text_to_speech import generate_tts
 from src.agents.nodes.node_quiz import run_node_quiz
 from src.agents.nodes.node_flashcards import run_node_flashcards
 from src.agents.nodes.node_recommendation import run_node_recommendation
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.prompts import ChatPromptTemplate
+from src.agents.output_structures import PodcastContent
+from src.utils.llm_utils import invoke_with_retry
+from src.utils.model_router import call_with_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -234,23 +239,18 @@ async def audio_summary(request: WorkflowRequest):
                 ("user", "Create an audio summary for: {topic_summary}. Respond in {language} ONLY.")
             ])
 
-            model = ChatGoogleGenerativeAI(
-                model="gemini-flash-latest", 
-                temperature=0.2, 
-                max_retries=3
-            ).with_structured_output(PodcastContent)
-
-            chain = prompt_template | model
             try:
-                response = invoke_with_retry(
-                    chain.invoke,
-                    {
+                response = call_with_fallback(
+                    task="audio",
+                    chain_fn=lambda llm: prompt_template | llm,
+                    input_data={
                         "grade_level": grade_level,
                         "language": target_lang,
                         "gender": gender,
                         "topic_summary": context_summary,
                     },
-                    max_retries=3
+                    structured_schema=PodcastContent,
+                    temperature=0.2
                 )
                 audio_script = response.script.replace("*", "").replace("#", "").replace("**", "")
             except Exception as script_err:

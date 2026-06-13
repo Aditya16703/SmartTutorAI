@@ -35,11 +35,12 @@ def log_provider_health(provider: str, task: str, success: bool, latency: float,
 # ── Routing table ──────────────────────────────────────────────────────
 TASK_MODEL_MAP: dict[str, str] = {
     "summary":           "gemini",
-    "quiz":              "gemini",
-    "flashcard":         "gemini",
-    "recommendation":    "gemini",
-    "chat":              "gemini",
-    "audio":             "gemini",
+    "quiz":              "groq",
+    "flashcard":         "mistral",
+    "recommendation":    "groq",
+    "chat":              "groq",
+    "audio":             "groq",
+    "verification":      "gemini",
     "document_analysis": "gemini",
     "fallback":          "gemini",
 }
@@ -122,10 +123,10 @@ health_tracker = ProviderHealthTracker()
 # ── Lazy model builders ────────────────────────────────────────────────
 
 def get_gemini_llm(temperature: float = 0.1, structured_schema: Optional[Type[BaseModel]] = None):
-    """Returns Gemini Flash (fallback model)."""
+    """Returns Gemini 2.5 Flash (latest model)."""
     from langchain_google_genai import ChatGoogleGenerativeAI
     llm = ChatGoogleGenerativeAI(
-        model="gemini-flash-latest",
+        model="gemini-2.5-flash",
         temperature=temperature,
         max_retries=2,
     )
@@ -143,7 +144,7 @@ def get_groq_llm(temperature: float = 0.1, structured_schema: Optional[Type[Base
     try:
         from langchain_groq import ChatGroq
         llm = ChatGroq(
-            model="llama3-70b-8192",
+            model="llama-3.3-70b-versatile",
             temperature=temperature,
             api_key=api_key,
             max_retries=2,
@@ -266,7 +267,7 @@ def call_with_fallback(
         try:
             primary_llm = get_model_for_task(task, temperature, structured_schema)
             chain = chain_fn(primary_llm)
-            result = invoke_with_retry(chain.invoke, input_data, max_retries=3, initial_delay=2.0)
+            result = invoke_with_retry(chain.invoke, input_data, max_retries=1, initial_delay=2.0)
             
             # Health Logging (Success)
             latency = time.time() - start_time
