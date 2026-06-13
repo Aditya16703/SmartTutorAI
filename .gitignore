@@ -72,3 +72,7 @@ venv/
 # OS specific files
 Thumbs.db
 desktop.ini
+
+# PDF Extraction Testing
+extract_pdf_structure.py
+pdf_structure.txt
