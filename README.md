@@ -3,6 +3,7 @@
 # 🎓 SmartTutorAI
 ### *The Next-Generation Agentic AI Learning & Cognitive Mastery Platform*
 
+[![Live Demo](https://img.shields.io/badge/Live_Demo-smart--tutor--ai--tan.vercel.app-22c55e?style=for-the-badge&logo=vercel&logoColor=white)](https://smart-tutor-ai-tan.vercel.app/)
 [![GitHub Stars](https://img.shields.io/github/stars/Aditya16703/SmartTutorAI?style=for-the-badge&logo=github&color=38bdf8)](https://github.com/Aditya16703/SmartTutorAI/stargazers)
 [![GitHub Forks](https://img.shields.io/github/forks/Aditya16703/SmartTutorAI?style=for-the-badge&logo=github&color=818cf8)](https://github.com/Aditya16703/SmartTutorAI/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
@@ -17,7 +18,7 @@
   <b>SmartTutorAI</b> transforms raw study notes, uploaded PDFs, textbooks, and YouTube video lectures into an immersive, multi-agent cognitive workspace. Engineered with <b>Hybrid Vector RAG</b>, <b>real-time SSE token streaming</b>, <b>RAG Triad hallucination guardrails</b>, <b>SuperMemo SM-2 spaced repetition</b>, and <b>multimodal vision homework solving</b>.
 </p>
 
-[Explore Features](#-core-architectural-pillars) • [System Architecture](#-system-architecture) • [Quickstart](#-quickstart--local-setup) • [Deploy on Vercel & Render](#-production-deployment) • [API Specs](#-api-endpoints)
+[🚀 Live Demo](https://smart-tutor-ai-tan.vercel.app/) • [Explore Features](#-core-architectural-pillars) • [System Architecture](#-system-architecture) • [Quickstart](#-quickstart--local-setup) • [Deploy on Vercel & Render](#-production-deployment) • [API Specs](#-api-endpoints)
 
 </div>
 
@@ -314,7 +315,7 @@ npm run dev
    - **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
    - **Health Check Path**: `/health`
 4. Add environment variables: `GROQ_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PORT=10000`.
-5. Copy your Render service URL (e.g., `https://smarttutor-ai-backend.onrender.com`).
+5. Backend live URL: [`https://smarttutorai.onrender.com`](https://smarttutorai.onrender.com/health)
 
 ---
 
@@ -323,10 +324,10 @@ npm run dev
 2. Set **Root Directory** to `frontend`.
 3. Framework Preset: `Next.js`.
 4. Add environment variables:
-   - `NEXT_PUBLIC_AGENT_API` = `https://smarttutor-ai-backend.onrender.com`
+   - `NEXT_PUBLIC_AGENT_API` = `https://smarttutorai.onrender.com`
    - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`
    - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
-5. Click **Deploy**!
+5. Frontend live URL: [**`https://smart-tutor-ai-tan.vercel.app/`**](https://smart-tutor-ai-tan.vercel.app/) 🚀
 
 ---
 
