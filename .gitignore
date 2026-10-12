@@ -76,3 +76,4 @@ desktop.ini
 # PDF Extraction Testing
 extract_pdf_structure.py
 pdf_structure.txt
+*.tsbuildinfo

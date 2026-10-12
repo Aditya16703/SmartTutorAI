@@ -5,49 +5,148 @@ from src.agents.state import AgentState
 from src.agents.output_structures import SummaryNoteOutput
 from src.services.supabase_service import supabase_service
 from src.utils.model_router import call_with_fallback
-from src.utils.pdf_extractor import extract_text_from_url, describe_pdf_visuals
-from src.utils.youtube_extractor import fetch_youtube_transcript
+from src.utils.pdf_extractor import extract_text_with_pages, describe_pdf_visuals, extract_text_from_url
+from src.utils.youtube_extractor import fetch_youtube_transcript_with_timestamps, fetch_youtube_transcript
 
 # -------------- Agent Node - Notes Summary ----------------
 # Primary model: DeepSeek  |  Fallback: Gemini Flash
+#
+# RAG Integration:
+#   1. PDFs → extract_text_with_pages  → ingest with page boundaries
+#   2. YouTube → fetch_with_timestamps → ingest with timestamp boundaries
+#   3. Topic  → ingest as single "topic" chunk (enables Q&A grounding later)
 
 logger = logging.getLogger(__name__)
 
 
 def run_node_summary_notes(state: AgentState):
-    """LLM call to generate summary notes for student (DeepSeek → Gemini fallback)."""
+    """
+    LLM call to generate summary notes for student (DeepSeek → Gemini fallback).
 
-    logger.info("node_summary_notes running.... [primary: DeepSeek]")
-    logger.info(state)
+    Enhancements over v1:
+      - Full-document extraction (no 25k char truncation for RAG mode)
+      - Page-level / timestamp-level ingestion into pgvector for citations
+      - Falls back gracefully if RAG ingestion fails (still generates summary)
+    """
+
+    logger.info("node_summary_notes running.... [primary: DeepSeek | RAG enabled]")
 
     target_lang = state['student_profile'].get("language", "english")
 
-    # Build human message content dynamically
-    user_content = [
-        {"type": "text",
-         "text": "Topic: " + str(state['user_prompt']['topic']) + ". \n\nIMPORTANT: Generate the summary in " + str(target_lang) + " ONLY."}
-    ]
-
-    # Extract text FAST if URL exists
+    # ── Source extraction ──────────────────────────────────────────────────
     url = (state['user_prompt'].get('file_url') or '').strip()
     extracted_content = ""
+    rag_ingested = False
 
     if url:
-        if "youtube.com" in url or "youtu.be" in url:
-            logger.info("🎬 Processing YouTube Source...")
-            extracted_content = fetch_youtube_transcript(url)
-        else:
-            logger.info("📄 Processing Document Source (Text Only Pass)...")
-            extracted_content = extract_text_from_url(url)
+        try:
+            from src.services.rag_service import (
+                ingest_document,
+                has_indexed_chunks,
+            )
 
-        if extracted_content:
-            user_content[0]["text"] += f"\n\nSource Material Content:\n{extracted_content}"
-        else:
-            logger.warning("Source extraction failed. Falling back to URL.")
-            user_content[0]["text"] += f"\n\nReference source URL: {url}"
+            learning_space_id = state["learning_space_id"]
+            already_indexed = has_indexed_chunks(learning_space_id)
+
+            if "youtube.com" in url or "youtu.be" in url:
+                logger.info("🎬 Processing YouTube Source (with timestamps)...")
+
+                if already_indexed:
+                    # Re-use transcript text for summary, skip re-ingestion
+                    from src.utils.youtube_extractor import fetch_youtube_transcript
+                    extracted_content = fetch_youtube_transcript(url)
+                    rag_ingested = True
+                    logger.info("[RAG] Re-using existing YouTube chunks")
+                else:
+                    full_text, segments = fetch_youtube_transcript_with_timestamps(url)
+                    extracted_content = full_text
+
+                    if full_text and segments:
+                        try:
+                            n = ingest_document(
+                                learning_space_id=learning_space_id,
+                                text=full_text,
+                                source_type="youtube",
+                                source_url=url,
+                                timestamp_boundaries=segments,
+                            )
+                            rag_ingested = n > 0
+                            logger.info(f"[RAG] YouTube: ingested {n} chunks")
+                        except Exception as rag_err:
+                            logger.warning(f"[RAG] YouTube ingestion failed (non-fatal): {rag_err}")
+                    elif not full_text:
+                        # No captions — fall back to legacy extractor
+                        logger.warning("[YouTube] No transcript found, using topic-only summary")
+                        extracted_content = ""
+
+            else:
+                logger.info("📄 Processing PDF Source (with page tracking)...")
+
+                if already_indexed:
+                    # Use legacy extractor for summary context, skip re-ingestion
+                    extracted_content = extract_text_from_url(url)
+                    rag_ingested = True
+                    logger.info("[RAG] Re-using existing PDF chunks")
+                else:
+                    full_text, page_boundaries, _ = extract_text_with_pages(url)
+
+                    if full_text:
+                        # Use up to 80k chars for the summary prompt (much better than 25k)
+                        extracted_content = full_text[:80000]
+
+                        try:
+                            n = ingest_document(
+                                learning_space_id=learning_space_id,
+                                text=full_text,
+                                source_type="pdf",
+                                source_url=url,
+                                page_boundaries=page_boundaries,
+                            )
+                            rag_ingested = n > 0
+                            logger.info(f"[RAG] PDF: ingested {n} chunks")
+                        except Exception as rag_err:
+                            logger.warning(f"[RAG] PDF ingestion failed (non-fatal): {rag_err}")
+                    else:
+                        logger.warning("[PDF] No text extracted. Trying legacy extractor...")
+                        extracted_content = extract_text_from_url(url)
+
+        except ImportError:
+            # RAG service not available — fall back to legacy extraction
+            logger.warning("[RAG] rag_service not importable, using legacy extraction")
+            if "youtube.com" in url or "youtu.be" in url:
+                extracted_content = fetch_youtube_transcript(url)
+            else:
+                extracted_content = extract_text_from_url(url)
+        except Exception as e:
+            logger.error(f"[RAG] Source ingestion pipeline error: {e}")
+            # Final fallback
+            if "youtube.com" in url or "youtu.be" in url:
+                extracted_content = fetch_youtube_transcript(url)
+            else:
+                extracted_content = extract_text_from_url(url)
+
     else:
-        logger.info("🧠 No file provided. Topic research only.")
+        logger.info("🧠 No file provided — topic research mode")
 
+    # ── Build user content for summary LLM call ───────────────────────────
+    user_text = f"Topic: {state['user_prompt']['topic']}"
+    user_text += f"\n\nIMPORTANT: Generate the summary in {target_lang} ONLY."
+
+    if extracted_content:
+        # Use first 80k chars for context (model context window dependent)
+        context_slice = extracted_content[:80000]
+        user_text += f"\n\nSource Material:\n{context_slice}"
+
+        if rag_ingested:
+            user_text += (
+                "\n\n[Note: The full document has been indexed for Q&A grounding. "
+                "Students can ask detailed follow-up questions grounded in the source.]"
+            )
+    else:
+        if url:
+            user_text += f"\n\nReference source URL: {url}"
+
+    # ── Prompt template ───────────────────────────────────────────────────
     prompt_template = ChatPromptTemplate([
         ("system", """You are an expert academic tutor. Create personalized educational content following these guidelines:
             
@@ -87,7 +186,7 @@ def run_node_summary_notes(state: AgentState):
                     if state['student_profile'].get("adaptivity_level") == "advanced"
                     else "Standard academic explanation appropriate for the grade level."
                 ),
-                "user_content": user_content[0]["text"],
+                "user_content": user_text,
             },
             structured_schema=SummaryNoteOutput,
             temperature=0.1,
@@ -95,7 +194,7 @@ def run_node_summary_notes(state: AgentState):
 
         logger.info(f"Summary generated in {target_lang}")
 
-        # Robustly extract summary text from response (handle both dict and object)
+        # Extract summary text from response (handle both dict and object)
         summary_text = ""
         if isinstance(response, dict):
             summary_text = response.get("summary", "")
@@ -106,7 +205,7 @@ def run_node_summary_notes(state: AgentState):
 
         logger.info(f"Summary text extracted, length: {len(summary_text)}")
 
-        # Save the summary notes as RAW TEXT to ensure DB compatibility
+        # Save summary to database
         if summary_text:
             supabase_service.update_learning_space(
                 state["learning_space_id"],
@@ -118,7 +217,7 @@ def run_node_summary_notes(state: AgentState):
 
         return {
             "summary_notes": summary_text,
-            "raw_source_text": extracted_content
+            "raw_source_text": extracted_content,
         }
 
     except Exception as e:

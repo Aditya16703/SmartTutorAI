@@ -3,14 +3,27 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { MessageCircle, Send, Loader2, Bot, User, Sparkles, ThumbsUp, ThumbsDown } from "lucide-react";
+import {
+  MessageCircle, Send, Loader2, Bot, User, Sparkles,
+  ThumbsUp, ThumbsDown, Database, AlertCircle,
+} from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
+import CitationPills from "./citation-pills";
+
+interface Citation {
+  label: string;
+  url?: string | null;
+  excerpt: string;
+  score: number;
+}
 
 interface Message {
   id?: string;
   role: "user" | "assistant";
   content: string;
   created_at?: string;
+  citations?: Citation[];
+  ragGrounded?: boolean;
 }
 
 interface DoubtSolverProps {
@@ -28,6 +41,11 @@ export default function DoubtSolver({
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingHistory, setIsFetchingHistory] = useState(true);
+  const [ragStatus, setRagStatus] = useState<{
+    indexed: boolean;
+    chunkCount: number;
+    sourceTypes: string[];
+  } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -68,11 +86,34 @@ export default function DoubtSolver({
     fetchHistory();
   }, [learningSpaceId, userId]);
 
+  // Check RAG indexing status on mount
+  useEffect(() => {
+    async function checkRagStatus() {
+      try {
+        const agentApi =
+          process.env.NEXT_PUBLIC_AGENT_API || "http://localhost:8000";
+        const res = await fetch(
+          `${agentApi}/api/doubt/rag-status/${learningSpaceId}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setRagStatus({
+            indexed: data.indexed,
+            chunkCount: data.chunk_count,
+            sourceTypes: data.source_types || [],
+          });
+        }
+      } catch {
+        // Non-critical: don't surface to user
+      }
+    }
+    checkRagStatus();
+  }, [learningSpaceId]);
+
   const handleSend = async () => {
     const question = input.trim();
     if (!question || isLoading) return;
 
-    // Optimistically add the user message
     const userMessage: Message = { role: "user", content: question };
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
@@ -93,13 +134,16 @@ export default function DoubtSolver({
       });
 
       if (!res.ok) {
-        throw new Error(`Server error: ${res.status}`);
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || `Server error: ${res.status}`);
       }
 
       const data = await res.json();
       const aiMessage: Message = {
         role: "assistant",
         content: data.answer || "Sorry, I couldn't generate an answer.",
+        citations: data.citations || [],
+        ragGrounded: data.rag_grounded || false,
       };
       setMessages((prev) => [...prev, aiMessage]);
     } catch (err) {
@@ -114,7 +158,6 @@ export default function DoubtSolver({
       ]);
     } finally {
       setIsLoading(false);
-      // Re-focus input
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   };
@@ -139,16 +182,40 @@ export default function DoubtSolver({
               Ask anything about this topic
             </p>
           </div>
-          <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
-            <Sparkles className="w-3 h-3" />
-            {language}
+
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+              <Sparkles className="w-3 h-3" />
+              {language}
+            </div>
+            {/* RAG status badge */}
+            {ragStatus && (
+              <div
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                  ragStatus.indexed
+                    ? "bg-emerald-500/10 text-emerald-600"
+                    : "bg-amber-500/10 text-amber-600"
+                }`}
+                title={
+                  ragStatus.indexed
+                    ? `${ragStatus.chunkCount} source chunks indexed`
+                    : "Source not indexed yet"
+                }
+              >
+                <Database className="w-2.5 h-2.5" />
+                {ragStatus.indexed ? `${ragStatus.chunkCount} chunks` : "Not indexed"}
+              </div>
+            )}
           </div>
         </CardTitle>
       </CardHeader>
 
-      <CardContent className="p-0 flex flex-col" style={{ minHeight: "340px", maxHeight: "480px" }}>
+      <CardContent className="p-0 flex flex-col" style={{ minHeight: "340px", maxHeight: "520px" }}>
         {/* Messages area */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ minHeight: "220px", maxHeight: "340px" }}>
+        <div
+          className="flex-1 overflow-y-auto p-4 space-y-5"
+          style={{ minHeight: "220px", maxHeight: "380px" }}
+        >
           {isFetchingHistory ? (
             <div className="flex items-center justify-center h-full py-8">
               <Loader2 className="w-5 h-5 animate-spin text-primary" />
@@ -159,11 +226,21 @@ export default function DoubtSolver({
                 <Bot className="w-6 h-6 text-primary" />
               </div>
               <div>
-                <p className="font-semibold text-foreground text-sm">Your AI Tutor is ready!</p>
+                <p className="font-semibold text-foreground text-sm">
+                  Your AI Tutor is ready!
+                </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Ask a doubt about this topic — in any language.
+                  {ragStatus?.indexed
+                    ? `Grounded in ${ragStatus.chunkCount} source passages — citations included.`
+                    : "Ask a doubt about this topic — in any language."}
                 </p>
               </div>
+              {ragStatus && !ragStatus.indexed && (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-full text-[11px] text-amber-700">
+                  <AlertCircle className="w-3 h-3" />
+                  Source not yet indexed — answers from summary notes
+                </div>
+              )}
             </div>
           ) : (
             messages.map((msg, idx) => (
@@ -188,26 +265,43 @@ export default function DoubtSolver({
                   )}
                 </div>
 
-                {/* Bubble */}
+                {/* Bubble + Citations */}
                 <div
-                  className={`max-w-[82%] px-3 py-2 rounded-2xl text-sm leading-relaxed group relative ${
-                    msg.role === "user"
-                      ? "bg-primary text-primary-foreground rounded-tr-sm"
-                      : "bg-muted text-foreground border border-border rounded-tl-sm"
-                  }`}
+                  className={`max-w-[82%] ${
+                    msg.role === "user" ? "items-end" : "items-start"
+                  } flex flex-col gap-1`}
                 >
-                  <p className="whitespace-pre-wrap break-words">{msg.content}</p>
-                  
-                  {msg.role === "assistant" && (
-                    <div className="absolute -bottom-6 left-0 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary font-bold">
-                        <ThumbsUp className="w-3 h-3" /> Helpful
-                      </button>
-                      <button className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-red-500 font-bold">
-                        <ThumbsDown className="w-3 h-3" /> Still confused
-                      </button>
-                    </div>
-                  )}
+                  <div
+                    className={`px-3 py-2 rounded-2xl text-sm leading-relaxed group relative ${
+                      msg.role === "user"
+                        ? "bg-primary text-primary-foreground rounded-tr-sm"
+                        : "bg-muted text-foreground border border-border rounded-tl-sm"
+                    }`}
+                  >
+                    <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+
+                    {msg.role === "assistant" && (
+                      <div className="absolute -bottom-6 left-0 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary font-bold">
+                          <ThumbsUp className="w-3 h-3" /> Helpful
+                        </button>
+                        <button className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-red-500 font-bold">
+                          <ThumbsDown className="w-3 h-3" /> Still confused
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Citations — only for assistant messages */}
+                  {msg.role === "assistant" &&
+                    msg.citations &&
+                    msg.citations.length > 0 && (
+                      <CitationPills
+                        citations={msg.citations}
+                        ragGrounded={msg.ragGrounded ?? false}
+                        className="w-full mt-1"
+                      />
+                    )}
                 </div>
               </div>
             ))
