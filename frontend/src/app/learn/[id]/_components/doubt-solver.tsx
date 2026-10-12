@@ -132,10 +132,11 @@ export default function DoubtSolver({
 
     setIsLoading(true);
 
+    const agentApi =
+      process.env.NEXT_PUBLIC_AGENT_API || "http://localhost:8000";
+
     try {
-      const agentApi =
-        process.env.NEXT_PUBLIC_AGENT_API || "http://localhost:8000";
-      const res = await fetch(`${agentApi}/api/doubt/ask`, {
+      const streamRes = await fetch(`${agentApi}/api/doubt/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -148,31 +149,135 @@ export default function DoubtSolver({
         }),
       });
 
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.detail || `Server error: ${res.status}`);
+      if (!streamRes.ok || !streamRes.body) {
+        // Fallback to synchronous endpoint
+        const syncRes = await fetch(`${agentApi}/api/doubt/ask`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            learning_space_id: learningSpaceId,
+            user_id: userId,
+            question: questionText,
+            language,
+            mode,
+            hint_tier: hintTier,
+          }),
+        });
+
+        if (!syncRes.ok) {
+          const errData = await syncRes.json().catch(() => ({}));
+          throw new Error(errData.detail || `Server error: ${syncRes.status}`);
+        }
+
+        const data = await syncRes.json();
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: data.answer || "Sorry, I couldn't generate an answer.",
+            citations: data.citations || [],
+            ragGrounded: data.rag_grounded || false,
+            mode: data.mode || mode,
+            hintTier: data.hint_tier || hintTier,
+          },
+        ]);
+        return;
       }
 
-      const data = await res.json();
-      const aiMessage: Message = {
-        role: "assistant",
-        content: data.answer || "Sorry, I couldn't generate an answer.",
-        citations: data.citations || [],
-        ragGrounded: data.rag_grounded || false,
-        mode: data.mode || mode,
-        hintTier: data.hint_tier || hintTier,
-      };
-      setMessages((prev) => [...prev, aiMessage]);
-    } catch (err) {
-      console.error("Doubt solver error:", err);
+      // Add placeholder assistant message that will update token-by-token
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content:
-            "Sorry, I ran into an error. Please check your connection and try again.",
+          content: "",
+          mode,
+          hintTier,
         },
       ]);
+
+      const reader = streamRes.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let accumulatedContent = "";
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          const jsonStr = trimmed.replace(/^data:\s*/, "");
+          try {
+            const event = JSON.parse(jsonStr);
+
+            if (event.type === "token") {
+              accumulatedContent += event.token;
+              setMessages((prev) => {
+                const next = [...prev];
+                const lastIdx = next.length - 1;
+                if (lastIdx >= 0 && next[lastIdx].role === "assistant") {
+                  next[lastIdx] = {
+                    ...next[lastIdx],
+                    content: accumulatedContent,
+                  };
+                }
+                return next;
+              });
+            } else if (event.type === "done") {
+              setMessages((prev) => {
+                const next = [...prev];
+                const lastIdx = next.length - 1;
+                if (lastIdx >= 0 && next[lastIdx].role === "assistant") {
+                  next[lastIdx] = {
+                    ...next[lastIdx],
+                    content: event.full_text || accumulatedContent,
+                    citations: event.citations || [],
+                    ragGrounded: event.rag_grounded || false,
+                    mode: event.mode || mode,
+                    hintTier: event.hint_tier || hintTier,
+                  };
+                }
+                return next;
+              });
+            } else if (event.type === "error") {
+              throw new Error(event.error);
+            }
+          } catch {
+            // Skip unparseable chunks
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Doubt solver streaming error:", err);
+      setMessages((prev) => {
+        const next = [...prev];
+        const lastIdx = next.length - 1;
+        if (
+          lastIdx >= 0 &&
+          next[lastIdx].role === "assistant" &&
+          !next[lastIdx].content
+        ) {
+          next[lastIdx] = {
+            ...next[lastIdx],
+            content:
+              "Sorry, I ran into an error. Please check your connection and try again.",
+          };
+          return next;
+        }
+        return [
+          ...next,
+          {
+            role: "assistant",
+            content:
+              "Sorry, I ran into an error. Please check your connection and try again.",
+          },
+        ];
+      });
     } finally {
       setIsLoading(false);
       setTimeout(() => inputRef.current?.focus(), 100);

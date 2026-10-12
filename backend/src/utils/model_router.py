@@ -300,3 +300,47 @@ def call_with_fallback(
         log_provider_health("gemini_fallback", task, False, latency, str(fallback_err))
         raise fallback_err
 
+
+async def stream_with_fallback(
+    task: str,
+    chain_fn,
+    input_data: dict,
+    temperature: float = 0.3,
+):
+    """
+    Async generator that streams LLM tokens in real-time.
+    Attempts primary provider first with .astream(); automatically
+    falls back to Gemini Flash if primary fails or is degraded.
+    """
+    model_name = TASK_MODEL_MAP.get(task, "gemini")
+    provider   = _TASK_TO_PROVIDER.get(model_name, "gemini")
+
+    if not health_tracker.is_degraded(provider):
+        try:
+            primary_llm = get_model_for_task(task, temperature)
+            chain = chain_fn(primary_llm)
+            emitted = False
+            async for chunk in chain.astream(input_data):
+                content = chunk.content if hasattr(chunk, "content") else str(chunk)
+                if content:
+                    emitted = True
+                    yield content
+            if emitted:
+                health_tracker.record_success(provider)
+                return
+        except Exception as primary_err:
+            health_tracker.record_failure(provider)
+            logger.warning(
+                f"[StreamRouter] ⚠️ Primary provider '{provider}' stream failed: {primary_err}. "
+                f"Falling back to Gemini stream."
+            )
+
+    # Fallback to Gemini
+    fallback_llm = get_gemini_llm(temperature)
+    chain = chain_fn(fallback_llm)
+    async for chunk in chain.astream(input_data):
+        content = chunk.content if hasattr(chunk, "content") else str(chunk)
+        if content:
+            yield content
+
+

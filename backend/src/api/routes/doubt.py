@@ -1,14 +1,20 @@
 import logging
+import json
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 from langchain_core.prompts import ChatPromptTemplate
 from src.services.supabase_service import supabase_service
-from src.utils.model_router import call_with_fallback
+from src.utils.model_router import call_with_fallback, stream_with_fallback
 
 # Doubt Solver route
 # Primary model: Groq Llama 3  |  Fallback: Gemini Flash
-# RAG: Hybrid vector + BM25 grounded answers with citations
+# Features:
+#   1. Hybrid Vector RAG grounded answers with citations
+#   2. KaTeX LaTeX formulas
+#   3. Socratic guided tutoring & 3-tier progressive hint scaffolding
+#   4. Server-Sent Events (SSE) real-time token streaming
 
 logger = logging.getLogger(__name__)
 
@@ -31,186 +37,160 @@ class Citation(BaseModel):
     score: float = 0.0  # relevance score 0-1
 
 
-
 class DoubtResponse(BaseModel):
     answer: str
     success: bool
     citations: list[Citation] = []
-    rag_grounded: bool = False   # True if answer used retrieved chunks
+    rag_grounded: bool = False
     mode: str = "direct"
     hint_tier: Optional[int] = None
     probing_question: Optional[str] = None
 
 
+async def _prepare_doubt_context(request: DoubtRequest):
+    """
+    Common context preparation pipeline for both synchronous and streaming doubt solving.
+    Handles student profile, multi-turn history, hybrid RAG retrieval, and Socratic prompts.
+    """
+    # 1. Fetch learning space data
+    learning_space = supabase_service.get_learning_space(request.learning_space_id)
+    if not learning_space:
+        raise HTTPException(status_code=404, detail="Learning space not found.")
 
-@router.post("/ask", response_model=DoubtResponse)
-async def ask_doubt(request: DoubtRequest):
-    """
-    AI Doubt Solver: Answers a student's follow-up question.
-    
-    v2 Enhancements:
-      - Hybrid RAG retrieval (pgvector + BM25) for source-grounded answers
-      - Per-response citations with page numbers / YouTube timestamps
-      - Graceful fallback to summary-notes context if RAG not available
-      - Multi-turn chat history for follow-up comprehension
-    
-    Primary: Groq Llama 3 | Fallback: Gemini Flash
-    """
+    # 2. Fetch student profile
+    student_profile = supabase_service.get_student_profile(request.user_id)
+
+    # 3. Determine language and grade level
+    target_lang = (
+        request.language
+        or (learning_space.get("language") or "").strip()
+        or (student_profile or {}).get("language", "English")
+    )
+    grade_level = (student_profile or {}).get("grade_level", "general")
+    topic = learning_space.get("topic", "the current topic")
+
+    # 4. Fetch recent chat history for multi-turn context (last 6 messages)
+    history_context = ""
     try:
-        # 1. Fetch learning space data
-        learning_space = supabase_service.get_learning_space(request.learning_space_id)
-        if not learning_space:
-            raise HTTPException(status_code=404, detail="Learning space not found.")
-
-        # 2. Fetch student profile
-        student_profile = supabase_service.get_student_profile(request.user_id)
-
-        # 3. Determine language and grade level
-        target_lang = (
-            request.language
-            or (learning_space.get("language") or "").strip()
-            or (student_profile or {}).get("language", "English")
+        history_response = (
+            supabase_service.client
+            .table("doubt_messages")
+            .select("role, content")
+            .eq("learning_space_id", request.learning_space_id)
+            .eq("user_id", request.user_id)
+            .order("created_at", desc=True)
+            .limit(6)
+            .execute()
         )
-        grade_level = (student_profile or {}).get("grade_level", "general")
-        topic = learning_space.get("topic", "the current topic")
-
-        # 4. Fetch recent chat history for multi-turn context (last 6 messages)
-        history_context = ""
-        try:
-            history_response = (
-                supabase_service.client
-                .table("doubt_messages")
-                .select("role, content")
-                .eq("learning_space_id", request.learning_space_id)
-                .eq("user_id", request.user_id)
-                .order("created_at", desc=True)
-                .limit(6)
-                .execute()
+        if history_response.data:
+            history_msgs = history_response.data[::-1]  # chronological order
+            history_context = "\n".join(
+                [f"{m['role'].capitalize()}: {m['content']}" for m in history_msgs]
             )
-            if history_response.data:
-                history_msgs = history_response.data[::-1]  # chronological order
-                history_context = "\n".join(
-                    [f"{m['role'].capitalize()}: {m['content']}" for m in history_msgs]
-                )
-        except Exception as h_err:
-            logger.warning(f"Could not fetch doubt history: {h_err}")
+    except Exception as h_err:
+        logger.warning(f"Could not fetch doubt history: {h_err}")
 
-        # 5. ── RAG RETRIEVAL ─────────────────────────────────────────────────
-        retrieved_chunks = []
-        rag_context = ""
-        citations: list[Citation] = []
-        rag_grounded = False
+    # 5. Hybrid RAG retrieval
+    retrieved_chunks = []
+    rag_context = ""
+    citations: list[Citation] = []
+    rag_grounded = False
 
-        try:
-            from src.services.rag_service import (
-                retrieve,
-                save_citations,
-                build_rag_context,
-                has_indexed_chunks,
+    try:
+        from src.services.rag_service import (
+            retrieve,
+            save_citations,
+            build_rag_context,
+            has_indexed_chunks,
+        )
+
+        if has_indexed_chunks(request.learning_space_id):
+            retrieved_chunks = retrieve(
+                learning_space_id=request.learning_space_id,
+                query=request.question,
+                top_k=6,
             )
 
-            if has_indexed_chunks(request.learning_space_id):
-                retrieved_chunks = retrieve(
+            if retrieved_chunks:
+                rag_context = build_rag_context(retrieved_chunks, max_chars=10000)
+                rag_grounded = True
+
+                for chunk in retrieved_chunks[:4]:  # top 4 citations max
+                    if chunk.similarity >= 0.35:
+                        citations.append(Citation(
+                            label=chunk.citation_label,
+                            url=chunk.citation_url,
+                            excerpt=chunk.content[:200].strip() + "...",
+                            score=round(chunk.similarity, 3),
+                        ))
+
+                save_citations(
                     learning_space_id=request.learning_space_id,
+                    user_id=request.user_id,
                     query=request.question,
-                    top_k=6,
+                    chunks=retrieved_chunks,
+                    response_type="doubt",
                 )
+    except Exception as rag_err:
+        logger.warning(f"[RAG] Retrieval failed: {rag_err}")
 
-                if retrieved_chunks:
-                    rag_context = build_rag_context(retrieved_chunks, max_chars=10000)
-                    rag_grounded = True
-
-                    # Build citation objects for API response
-                    for chunk in retrieved_chunks[:4]:  # top 4 citations max
-                        if chunk.similarity >= 0.35:  # relevance threshold
-                            citations.append(Citation(
-                                label=chunk.citation_label,
-                                url=chunk.citation_url,
-                                excerpt=chunk.content[:200].strip() + "...",
-                                score=round(chunk.similarity, 3),
-                            ))
-
-                    logger.info(
-                        f"[RAG] Retrieved {len(retrieved_chunks)} chunks, "
-                        f"{len(citations)} citations above threshold"
-                    )
-
-                    # Persist citation records for analytics
-                    save_citations(
-                        learning_space_id=request.learning_space_id,
-                        user_id=request.user_id,
-                        query=request.question,
-                        chunks=retrieved_chunks,
-                        response_type="doubt",
-                    )
-                else:
-                    logger.info("[RAG] No relevant chunks found for query")
-            else:
-                logger.info("[RAG] Space has no indexed chunks yet, using summary context")
-
-        except ImportError:
-            logger.warning("[RAG] rag_service not available, using summary fallback")
-        except Exception as rag_err:
-            logger.warning(f"[RAG] Retrieval failed (non-fatal): {rag_err}")
-
-        # 6. Fallback context: use summary notes if no RAG context
-        if not rag_context:
-            raw_summary = learning_space.get("summary_notes", "")
-            if isinstance(raw_summary, dict):
-                fallback_context = raw_summary.get("summary", str(raw_summary))
-            else:
-                fallback_context = str(raw_summary) if raw_summary else ""
-            # Limit to 8000 chars for prompt safety
-            rag_context = fallback_context[:8000]
-
-        # 7. ── BUILD PROMPT & PEDAGOGICAL INSTRUCTIONS ──────────────────────────
-        if rag_grounded:
-            context_instruction = (
-                "You have access to VERIFIED SOURCE PASSAGES from the student's learning materials. "
-                "ALWAYS ground your answer in these passages. "
-                "When citing a source passage, mention the label (e.g., 'As stated on Page 12...' or 'At 2:34 in the video...'). "
-                "If the passages do not contain enough information, say so and provide general knowledge."
-            )
+    # 6. Fallback context
+    if not rag_context:
+        raw_summary = learning_space.get("summary_notes", "")
+        if isinstance(raw_summary, dict):
+            fallback_context = raw_summary.get("summary", str(raw_summary))
         else:
-            context_instruction = (
-                "Use the summary notes below as your primary context. "
-                "If the question goes beyond the notes, use your general knowledge while staying on topic."
-            )
+            fallback_context = str(raw_summary) if raw_summary else ""
+        rag_context = fallback_context[:8000]
 
-        if request.mode == "socratic":
-            if request.hint_tier == 1:
-                pedagogy_instruction = (
-                    "PEDAGOGICAL ROLE: SOCRATIC TIER 1 (GENTLE NUDGE)\n"
-                    "- Do NOT provide the final answer or calculated solution.\n"
-                    "- Remind the student of the relevant principle, concept name, or definition.\n"
-                    "- Ask a warm, guiding question to nudge them into taking the first step themselves."
-                )
-            elif request.hint_tier == 2:
-                pedagogy_instruction = (
-                    "PEDAGOGICAL ROLE: SOCRATIC TIER 2 (GUIDING STRATEGY & CLUE)\n"
-                    "- State the key formula or outline the step 1 setup.\n"
-                    "- Explain what parameters or conditions to identify, and prompt the student to carry out the next step."
-                )
-            elif request.hint_tier == 3:
-                pedagogy_instruction = (
-                    "PEDAGOGICAL ROLE: SOCRATIC TIER 3 (STEP-BY-STEP SOLUTION)\n"
-                    "- The student requested the full solution. Walk through the complete step-by-step resolution clearly.\n"
-                    "- Conclude with a quick 1-sentence check-for-understanding question."
-                )
-            else:
-                pedagogy_instruction = (
-                    "PEDAGOGICAL ROLE: SOCRATIC TUTOR (GUIDED INQUIRY)\n"
-                    "- Guide the student's thinking rather than immediately giving away the final numerical or factual answer.\n"
-                    "- Validate what they asked, highlight the crucial intuition, and ask a targeted guiding question that encourages them to reason it through."
-                )
+    # 7. Pedagogical instructions
+    if rag_grounded:
+        context_instruction = (
+            "You have access to VERIFIED SOURCE PASSAGES from the student's learning materials. "
+            "ALWAYS ground your answer in these passages. "
+            "When citing a source passage, mention the label (e.g., 'As stated on Page 12...' or 'At 2:34 in the video...'). "
+            "If the passages do not contain enough information, say so and provide general knowledge."
+        )
+    else:
+        context_instruction = (
+            "Use the summary notes below as your primary context. "
+            "If the question goes beyond the notes, use your general knowledge while staying on topic."
+        )
+
+    if request.mode == "socratic":
+        if request.hint_tier == 1:
+            pedagogy_instruction = (
+                "PEDAGOGICAL ROLE: SOCRATIC TIER 1 (GENTLE NUDGE)\n"
+                "- Do NOT provide the final answer or calculated solution.\n"
+                "- Remind the student of the relevant principle, concept name, or definition.\n"
+                "- Ask a warm, guiding question to nudge them into taking the first step themselves."
+            )
+        elif request.hint_tier == 2:
+            pedagogy_instruction = (
+                "PEDAGOGICAL ROLE: SOCRATIC TIER 2 (GUIDING STRATEGY & CLUE)\n"
+                "- State the key formula or outline the step 1 setup.\n"
+                "- Explain what parameters or conditions to identify, and prompt the student to carry out the next step."
+            )
+        elif request.hint_tier == 3:
+            pedagogy_instruction = (
+                "PEDAGOGICAL ROLE: SOCRATIC TIER 3 (STEP-BY-STEP SOLUTION)\n"
+                "- The student requested the full solution. Walk through the complete step-by-step resolution clearly.\n"
+                "- Conclude with a quick 1-sentence check-for-understanding question."
+            )
         else:
             pedagogy_instruction = (
-                "PEDAGOGICAL ROLE: DIRECT EXPLANATION\n"
-                "- Provide a direct, thorough, and clear explanation answering their question completely."
+                "PEDAGOGICAL ROLE: SOCRATIC TUTOR (GUIDED INQUIRY)\n"
+                "- Guide the student's thinking rather than immediately giving away the final numerical or factual answer.\n"
+                "- Validate what they asked, highlight the crucial intuition, and ask a targeted guiding question that encourages them to reason it through."
             )
+    else:
+        pedagogy_instruction = (
+            "PEDAGOGICAL ROLE: DIRECT EXPLANATION\n"
+            "- Provide a direct, thorough, and clear explanation answering their question completely."
+        )
 
-        prompt_template = ChatPromptTemplate([
-            ("system", f"""You are a warm, patient, and world-class academic tutor.
+    prompt_template = ChatPromptTemplate([
+        ("system", f"""You are a warm, patient, and world-class academic tutor.
 
 Student Profile:
 - Grade Level: {{grade_level}}
@@ -243,34 +223,41 @@ Rules:
 8. MATHEMATICAL & SCIENTIFIC NOTATION: Whenever math, physics, or science formulas appear, ALWAYS write them using standard LaTeX notation ($...$ for inline math, $$...$$ for block equations) so they render with crystal-clear mathematical typography.
 9. If you cite a source passage, format it as: [Source: <label>]
 """),
-            ("user", "{question}")
-        ])
+        ("user", "{question}")
+    ])
 
-        logger.info(
-            f"Doubt Solver: answering in {target_lang} for space {request.learning_space_id} "
-            f"[mode: {request.mode}, hint_tier: {request.hint_tier}, RAG grounded: {rag_grounded}, "
-            f"history: {bool(history_context)}, citations: {len(citations)}]"
-        )
+    input_data = {
+        "grade_level": grade_level,
+        "language": target_lang,
+        "topic": topic,
+        "context": rag_context or "No context available.",
+        "history": history_context or "No previous history.",
+        "question": request.question,
+    }
 
-        # 8. Call LLM with Gemini fallback
+    return prompt_template, input_data, citations, rag_grounded
+
+
+@router.post("/ask", response_model=DoubtResponse)
+async def ask_doubt(request: DoubtRequest):
+    """
+    AI Doubt Solver: Answers a student's question synchronously.
+    Primary: Groq Llama 3 | Fallback: Gemini Flash
+    """
+    try:
+        prompt_template, input_data, citations, rag_grounded = await _prepare_doubt_context(request)
+
         response = call_with_fallback(
             task="chat",
             chain_fn=lambda llm: prompt_template | llm,
-            input_data={
-                "grade_level": grade_level,
-                "language": target_lang,
-                "topic": topic,
-                "context": rag_context or "No context available.",
-                "history": history_context or "No previous history.",
-                "question": request.question,
-            },
+            input_data=input_data,
             structured_schema=None,
             temperature=0.3,
         )
 
         answer_text = response.content if hasattr(response, "content") else str(response)
 
-        # 9. Save conversation to Supabase
+        # Save to database
         try:
             supabase_service.client.table("doubt_messages").insert([
                 {
@@ -306,6 +293,76 @@ Rules:
         raise HTTPException(status_code=500, detail=f"Failed to answer doubt: {str(e)}")
 
 
+@router.post("/stream")
+async def stream_doubt(request: DoubtRequest):
+    """
+    AI Doubt Solver: Real-time Server-Sent Events (SSE) token streaming.
+    Streams tokens chunk-by-chunk for an immediate, responsive UI typing experience.
+    """
+    try:
+        prompt_template, input_data, citations, rag_grounded = await _prepare_doubt_context(request)
+
+        async def sse_generator():
+            # 1. Start event
+            yield f"data: {json.dumps({'type': 'start', 'mode': request.mode or 'direct', 'rag_grounded': rag_grounded})}\n\n"
+
+            full_text = ""
+            try:
+                # 2. Token stream via stream_with_fallback
+                async for token in stream_with_fallback(
+                    task="chat",
+                    chain_fn=lambda llm: prompt_template | llm,
+                    input_data=input_data,
+                    temperature=0.3,
+                ):
+                    full_text += token
+                    yield f"data: {json.dumps({'type': 'token', 'token': token})}\n\n"
+
+                # 3. Save completed conversation to Supabase
+                try:
+                    supabase_service.client.table("doubt_messages").insert([
+                        {
+                            "learning_space_id": request.learning_space_id,
+                            "user_id": request.user_id,
+                            "role": "user",
+                            "content": request.question,
+                        },
+                        {
+                            "learning_space_id": request.learning_space_id,
+                            "user_id": request.user_id,
+                            "role": "assistant",
+                            "content": full_text,
+                        },
+                    ]).execute()
+                    logger.info("Saved streamed doubt conversation to database")
+                except Exception as db_err:
+                    logger.warning(f"Failed to save streamed doubt messages: {db_err}")
+
+                # 4. Completion event with citations
+                citations_payload = [c.model_dump() for c in citations]
+                yield f"data: {json.dumps({'type': 'done', 'citations': citations_payload, 'rag_grounded': rag_grounded, 'mode': request.mode or 'direct', 'hint_tier': request.hint_tier, 'full_text': full_text})}\n\n"
+
+            except Exception as stream_err:
+                logger.error(f"Error during SSE stream: {stream_err}")
+                yield f"data: {json.dumps({'type': 'error', 'error': str(stream_err)})}\n\n"
+
+        return StreamingResponse(
+            sse_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error setting up doubt stream: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to stream doubt: {str(e)}")
+
+
 @router.get("/history/{learning_space_id}/{user_id}")
 async def get_doubt_history(learning_space_id: str, user_id: str):
     """Fetch chat history for a learning space."""
@@ -335,12 +392,12 @@ async def get_rag_status(learning_space_id: str):
     try:
         from src.services.rag_service import has_indexed_chunks
         indexed = has_indexed_chunks(learning_space_id)
-        
+
         if indexed:
             result = supabase_service.client.table("document_chunks").select(
                 "source_type, id", count="exact"
             ).eq("learning_space_id", learning_space_id).execute()
-            
+
             source_types = list({r["source_type"] for r in (result.data or [])})
             return {
                 "indexed": True,
