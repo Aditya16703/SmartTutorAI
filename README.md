@@ -18,6 +18,10 @@
   <a href="https://smarttutorai.onrender.com/health" target="_blank">
     <img src="https://img.shields.io/badge/⚡%20Backend_API-Render_Active-009688?style=for-the-badge&logo=render&logoColor=white" alt="Render Backend" />
   </a>
+  <a href="https://github.com/Aditya16703/SmartTutorAI/actions/workflows/ci.yml" target="_blank">
+    <img src="https://github.com/Aditya16703/SmartTutorAI/actions/workflows/ci.yml/badge.svg?style=for-the-badge" alt="SmartTutorAI CI/CD" />
+  </a>
+  <img src="https://img.shields.io/badge/Docker-Multi--Container-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Ready" />
 </p>
 
 <!-- Technology & Metric Shields -->
@@ -352,12 +356,30 @@ git clone https://github.com/Aditya16703/SmartTutorAI.git
 cd SmartTutorAI
 ```
 
-### 2. Database Setup (Supabase)
+### 🐳 Option A: Run with Docker Compose (Recommended - 1 Command)
+Spin up both the FastAPI backend and Next.js frontend in isolated multi-stage containers:
+```bash
+# Copy env templates
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+
+# Build and start all services
+docker compose up --build
+```
+- **Frontend**: `http://localhost:3000`
+- **Backend API**: `http://localhost:8000` (`/docs` for interactive Swagger UI)
+- **Healthcheck**: `http://localhost:8000/health`
+
+---
+
+### 💻 Option B: Manual Local Setup
+
+#### Step 1: Database Setup (Supabase)
 In your [Supabase Dashboard](https://supabase.com/dashboard) ➔ **SQL Editor**, execute:
 1. [`rag_schema.sql`](./rag_schema.sql) (creates `document_chunks` table, HNSW vector index, and `hybrid_search` RPC function).
 2. [`mastery_schema.sql`](./mastery_schema.sql) (creates `concept_mastery`, `misconception_logs`, and SM-2 functions).
 
-### 3. Backend Setup (FastAPI)
+#### Step 2: Backend Setup (FastAPI)
 ```bash
 cd backend
 python -m venv venv
@@ -372,7 +394,7 @@ python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 *Backend live at `http://localhost:8000` (`/docs` for Swagger UI).*
 
-### 4. Frontend Setup (Next.js 15)
+#### Step 3: Frontend Setup (Next.js 15)
 ```bash
 cd frontend
 npm install
