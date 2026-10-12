@@ -2,14 +2,13 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, RefreshCcw, Brain, Eye, EyeOff } from "lucide-react";
-import ReactMarkdown from "react-markdown";
 import React, { useState } from "react";
 import GenerationTimer from "./generation-timer";
 import { Button } from "@/components/ui/button";
 import { invokeAgentWorkflow } from "../../actions/learning-space";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ThumbsUp, ThumbsDown } from "lucide-react";
-import MermaidDiagram from "./mermaid-diagram";
+import MarkdownRenderer from "@/components/markdown-renderer";
 
 export default function SummaryNotes({
   learningSpaceId,
@@ -101,48 +100,19 @@ export default function SummaryNotes({
         {summaryNotesContent ? (
           <div className="prose max-w-none dark:prose-invert">
             <div className="bg-background rounded-lg p-6 border border-border group relative">
-               <div className="whitespace-pre-wrap text-muted-foreground leading-relaxed font-serif text-lg">
-                <ReactMarkdown
-                  components={{
-                    code({ inline, className, children, ...props }: any) {
-                      const match = /language-(\w+)/.exec(className || "");
-                      if (!inline && match && match[1] === "mermaid") {
-                        return <MermaidDiagram chart={String(children).replace(/\n$/, "")} />;
-                      }
-                      return (
-                        <code className={className} {...props}>
-                          {children}
-                        </code>
-                      );
-                    },
-                    strong({ children }) {
-                      const text = String(children);
-                      if (!studyMode) return <strong>{children}</strong>;
-                      
-                      const isRevealed = revealedWords.has(text);
-                      return (
-                        <span 
-                          onClick={() => {
-                            const newSet = new Set(revealedWords);
-                            if (newSet.has(text)) newSet.delete(text);
-                            else newSet.add(text);
-                            setRevealedWords(newSet);
-                          }}
-                          className={`inline-block transition-all duration-300 rounded px-1 cursor-pointer font-bold ${
-                            isRevealed 
-                              ? "bg-primary/10 text-primary" 
-                              : "bg-muted-foreground/20 text-transparent blur-[4px] select-none hover:bg-muted-foreground/30"
-                          }`}
-                        >
-                          {children}
-                        </span>
-                      );
-                    }
-                  }}
-                >
-                  {getDisplayContent()}
-                </ReactMarkdown>
-               </div>
+                <div className="text-muted-foreground leading-relaxed font-serif text-lg">
+                  <MarkdownRenderer
+                    content={getDisplayContent()}
+                    studyMode={studyMode}
+                    revealedWords={revealedWords}
+                    onToggleWord={(word) => {
+                      const newSet = new Set(revealedWords);
+                      if (newSet.has(word)) newSet.delete(word);
+                      else newSet.add(word);
+                      setRevealedWords(newSet);
+                    }}
+                  />
+                </div>
                
                {/* Feedback Overlay */}
                <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

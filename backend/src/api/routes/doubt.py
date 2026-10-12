@@ -20,13 +20,16 @@ class DoubtRequest(BaseModel):
     user_id: str
     question: str
     language: Optional[str] = None
+    mode: Optional[str] = "direct"  # "direct" | "socratic"
+    hint_tier: Optional[int] = None  # 1 (nudge), 2 (clue/formula), 3 (full solution)
 
 
 class Citation(BaseModel):
     label: str          # "Page 12", "2:34", "Section 3"
-    url: Optional[str]  # deep link to source
+    url: Optional[str] = None  # deep link to source
     excerpt: str        # short snippet from source
-    score: float        # relevance score 0-1
+    score: float = 0.0  # relevance score 0-1
+
 
 
 class DoubtResponse(BaseModel):
@@ -34,6 +37,10 @@ class DoubtResponse(BaseModel):
     success: bool
     citations: list[Citation] = []
     rag_grounded: bool = False   # True if answer used retrieved chunks
+    mode: str = "direct"
+    hint_tier: Optional[int] = None
+    probing_question: Optional[str] = None
+
 
 
 @router.post("/ask", response_model=DoubtResponse)
@@ -156,7 +163,7 @@ async def ask_doubt(request: DoubtRequest):
             # Limit to 8000 chars for prompt safety
             rag_context = fallback_context[:8000]
 
-        # 7. ── BUILD PROMPT ───────────────────────────────────────────────────
+        # 7. ── BUILD PROMPT & PEDAGOGICAL INSTRUCTIONS ──────────────────────────
         if rag_grounded:
             context_instruction = (
                 "You have access to VERIFIED SOURCE PASSAGES from the student's learning materials. "
@@ -170,8 +177,40 @@ async def ask_doubt(request: DoubtRequest):
                 "If the question goes beyond the notes, use your general knowledge while staying on topic."
             )
 
+        if request.mode == "socratic":
+            if request.hint_tier == 1:
+                pedagogy_instruction = (
+                    "PEDAGOGICAL ROLE: SOCRATIC TIER 1 (GENTLE NUDGE)\n"
+                    "- Do NOT provide the final answer or calculated solution.\n"
+                    "- Remind the student of the relevant principle, concept name, or definition.\n"
+                    "- Ask a warm, guiding question to nudge them into taking the first step themselves."
+                )
+            elif request.hint_tier == 2:
+                pedagogy_instruction = (
+                    "PEDAGOGICAL ROLE: SOCRATIC TIER 2 (GUIDING STRATEGY & CLUE)\n"
+                    "- State the key formula or outline the step 1 setup.\n"
+                    "- Explain what parameters or conditions to identify, and prompt the student to carry out the next step."
+                )
+            elif request.hint_tier == 3:
+                pedagogy_instruction = (
+                    "PEDAGOGICAL ROLE: SOCRATIC TIER 3 (STEP-BY-STEP SOLUTION)\n"
+                    "- The student requested the full solution. Walk through the complete step-by-step resolution clearly.\n"
+                    "- Conclude with a quick 1-sentence check-for-understanding question."
+                )
+            else:
+                pedagogy_instruction = (
+                    "PEDAGOGICAL ROLE: SOCRATIC TUTOR (GUIDED INQUIRY)\n"
+                    "- Guide the student's thinking rather than immediately giving away the final numerical or factual answer.\n"
+                    "- Validate what they asked, highlight the crucial intuition, and ask a targeted guiding question that encourages them to reason it through."
+                )
+        else:
+            pedagogy_instruction = (
+                "PEDAGOGICAL ROLE: DIRECT EXPLANATION\n"
+                "- Provide a direct, thorough, and clear explanation answering their question completely."
+            )
+
         prompt_template = ChatPromptTemplate([
-            ("system", f"""You are a warm, patient, and encouraging academic tutor.
+            ("system", f"""You are a warm, patient, and world-class academic tutor.
 
 Student Profile:
 - Grade Level: {{grade_level}}
@@ -180,6 +219,8 @@ Student Profile:
 Topic: "{{topic}}"
 
 {context_instruction}
+
+{pedagogy_instruction}
 
 Source Context:
 ---
@@ -192,22 +233,23 @@ Recent Conversation History:
 ---
 
 Rules:
-1. Answer the student's doubt clearly and simply, appropriate for {{grade_level}}.
-2. Use examples, analogies, and relatable real-world scenarios.
+1. Appropriately pitch the explanation for {{grade_level}}.
+2. Use relatable analogies, practical examples, and clear intuitions.
 3. ALWAYS respond in {{language}}. This is CRITICAL.
 4. If the doubt is unrelated to the topic, gently redirect them back.
 5. Keep your answer concise (under 400 words) but thorough.
-6. Be encouraging — use phrases like "Great question!" in {{language}}.
+6. Be encouraging and supportive.
 7. Use Conversation History to understand follow-up questions.
-8. If you cite a source, format it as: [Source: <label>]
+8. MATHEMATICAL & SCIENTIFIC NOTATION: Whenever math, physics, or science formulas appear, ALWAYS write them using standard LaTeX notation ($...$ for inline math, $$...$$ for block equations) so they render with crystal-clear mathematical typography.
+9. If you cite a source passage, format it as: [Source: <label>]
 """),
             ("user", "{question}")
         ])
 
         logger.info(
             f"Doubt Solver: answering in {target_lang} for space {request.learning_space_id} "
-            f"[RAG grounded: {rag_grounded}, history: {bool(history_context)}, "
-            f"citations: {len(citations)}]"
+            f"[mode: {request.mode}, hint_tier: {request.hint_tier}, RAG grounded: {rag_grounded}, "
+            f"history: {bool(history_context)}, citations: {len(citations)}]"
         )
 
         # 8. Call LLM with Gemini fallback
@@ -253,6 +295,8 @@ Rules:
             success=True,
             citations=citations,
             rag_grounded=rag_grounded,
+            mode=request.mode or "direct",
+            hint_tier=request.hint_tier,
         )
 
     except HTTPException:

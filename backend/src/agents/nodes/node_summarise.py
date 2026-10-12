@@ -166,6 +166,7 @@ def run_node_summary_notes(state: AgentState):
             7. DO NOT use any other language than {language} in your output.
             8. VISUAL LEARNING: Include at least one Mermaid.js diagram (graph TD or mindmap) to visualize the core concepts, relationship flows, or processes described. Use the language `mermaid` for the code block.
             9. Ensure the Mermaid diagram labels are also in {language}.
+            10. MATHEMATICAL & SCIENTIFIC NOTATION: Whenever formulas, physics laws, chemical reactions, or quantitative equations appear, ALWAYS write them using standard LaTeX notation ($...$ for inline equations, $$...$$ for display equations) so they render with crystal-clear mathematical typography.
             """),
         ("user", "{user_content}")
     ])
