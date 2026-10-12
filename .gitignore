@@ -52,7 +52,7 @@ static/
 public/uploads/
 
 # Dependencies
-package-lock.json
+# (package-lock.json is tracked for deterministic CI/CD & Docker builds)
 yarn.lock
 poetry.lock
 
