@@ -8,6 +8,7 @@ import UploadedSources from "./sources";
 import AudioOverview from "./audio-overview";
 import Quiz from "./quiz";
 import DoubtSolver from "./doubt-solver";
+import ConceptMastery from "./concept-mastery";
 import { useLearningSpaceRealtime } from "./use-learning-space-realtime";
 import { WifiOff, RefreshCw } from "lucide-react";
 
@@ -99,6 +100,12 @@ function MainGrid({ learningSpace, user }: { learningSpace: LearningSpace; user:
           userId={user.id}
           initialFlashcards={getSafeData(learningSpace, "flashcards")}
           language={language}
+        />
+
+        {/* Concept Mastery & Misconception Tracker */}
+        <ConceptMastery
+          learningSpaceId={learningSpace.id}
+          userId={user.id}
         />
 
         {/* Recommendations */}

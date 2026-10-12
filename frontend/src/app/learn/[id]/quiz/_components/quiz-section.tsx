@@ -14,8 +14,11 @@ import {
   Clock,
   Target,
   RotateCcw,
+  Brain,
+  Sparkles,
 } from "lucide-react";
 import { handleUpdateXpAction } from "@/app/learn/actions/student-profile";
+import MarkdownRenderer from "@/components/markdown-renderer";
 
 interface Question {
   hint: string;
@@ -50,6 +53,12 @@ export default function QuizSection({ quizData, learningSpaceId, userId }: QuizS
   const [startTime] = useState(Date.now());
   const [endTime, setEndTime] = useState<number | null>(null);
   const [showHint, setShowHint] = useState(false);
+  const [diagnosedMisconception, setDiagnosedMisconception] = useState<{
+    conceptName: string;
+    misconception: string;
+    remediation: string;
+  } | null>(null);
+  const [isDiagnosing, setIsDiagnosing] = useState(false);
   const attemptSaved = useRef(false);
 
   // Save quiz attempt to Supabase when quiz completes
@@ -99,9 +108,63 @@ export default function QuizSection({ quizData, learningSpaceId, userId }: QuizS
     newAnswers[currentQuestionIndex] = selectedAnswer;
     setAnswers(newAnswers);
     setShowFeedback(true);
+
+    const isCorrect = selectedAnswer === currentQuestion.correctAnswer;
+    const agentApi =
+      process.env.NEXT_PUBLIC_AGENT_API || "http://localhost:8000";
+
+    if (!isCorrect && learningSpaceId && userId) {
+      // Trigger AI Misconception Diagnosis
+      setIsDiagnosing(true);
+      fetch(`${agentApi}/api/mastery/diagnose`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: userId,
+          learning_space_id: learningSpaceId,
+          question_text: currentQuestion.question,
+          chosen_answer:
+            currentQuestion.options[
+              selectedAnswer as keyof typeof currentQuestion.options
+            ],
+          correct_answer:
+            currentQuestion.options[
+              currentQuestion.correctAnswer as keyof typeof currentQuestion.options
+            ],
+          explanation: currentQuestion.explanation,
+          topic: quizData.title,
+        }),
+      })
+        .then((res) => res.json())
+        .then((diag) => {
+          if (diag.success) {
+            setDiagnosedMisconception({
+              conceptName: diag.concept_name,
+              misconception: diag.misconception,
+              remediation: diag.remediation_advice,
+            });
+          }
+        })
+        .catch((e) => console.warn("Diagnostic fetch error:", e))
+        .finally(() => setIsDiagnosing(false));
+    } else if (isCorrect && learningSpaceId && userId) {
+      // Record correct attempt to boost concept mastery score
+      fetch(`${agentApi}/api/mastery/record-attempt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: userId,
+          learning_space_id: learningSpaceId,
+          concept_name: quizData.title,
+          is_correct: true,
+        }),
+      }).catch(() => {});
+    }
   };
 
   const handleNextQuestion = () => {
+    setDiagnosedMisconception(null);
+    setIsDiagnosing(false);
     if (isLastQuestion) {
       setIsQuizComplete(true);
       setEndTime(Date.now());
@@ -114,6 +177,8 @@ export default function QuizSection({ quizData, learningSpaceId, userId }: QuizS
   };
 
   const handlePreviousQuestion = () => {
+    setDiagnosedMisconception(null);
+    setIsDiagnosing(false);
     if (currentQuestionIndex > 0) {
       setCurrentQuestionIndex(currentQuestionIndex - 1);
       setSelectedAnswer(answers[currentQuestionIndex - 1]);
@@ -142,6 +207,8 @@ export default function QuizSection({ quizData, learningSpaceId, userId }: QuizS
     setCurrentQuestionIndex(0);
     setSelectedAnswer(null);
     setShowFeedback(false);
+    setDiagnosedMisconception(null);
+    setIsDiagnosing(false);
     setAnswers(new Array(quizData.questions.length).fill(""));
     setIsQuizComplete(false);
     setEndTime(null);
@@ -439,27 +506,65 @@ export default function QuizSection({ quizData, learningSpaceId, userId }: QuizS
 
           {/* Explanation */}
           {showFeedback && (
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-blue-100 dark:border-gray-700 shadow-sm animate-in slide-in-from-bottom-2 duration-300">
-              <h3 className="font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-blue-100 dark:border-gray-700 shadow-sm animate-in slide-in-from-bottom-2 duration-300 space-y-3">
+              <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                 <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
                   <span className="text-white text-xs font-bold">!</span>
                 </div>
                 Explanation
               </h3>
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed">{currentQuestion.explanation}</p>
+              <div className="text-gray-700 dark:text-gray-300 leading-relaxed text-sm">
+                <MarkdownRenderer content={currentQuestion.explanation} />
+              </div>
 
               {selectedAnswer === currentQuestion.correctAnswer ? (
-                <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800/50 rounded-lg">
-                  <p className="text-green-700 dark:text-green-400 font-medium">
-                    ✅ Correct! You earned 2 points.
+                <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800/50 rounded-lg">
+                  <p className="text-green-700 dark:text-green-400 font-medium text-sm">
+                    ✅ Correct! You earned 2 points and strengthened this concept.
                   </p>
                 </div>
               ) : (
-                <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-lg">
-                  <p className="text-red-700 dark:text-red-400 font-medium">
-                    ❌ Incorrect. The correct answer is option{" "}
-                    {currentQuestion.correctAnswer}.
-                  </p>
+                <div className="space-y-3">
+                  <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-lg">
+                    <p className="text-red-700 dark:text-red-400 font-medium text-sm">
+                      ❌ Incorrect. The correct answer is option{" "}
+                      {currentQuestion.correctAnswer}.
+                    </p>
+                  </div>
+
+                  {/* AI Misconception Diagnostic Card */}
+                  {isDiagnosing ? (
+                    <div className="p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs flex items-center gap-2 text-purple-600 dark:text-purple-400 animate-pulse">
+                      <Brain className="w-4 h-4 animate-spin" />
+                      <span>Diagnosing underlying cognitive misconception...</span>
+                    </div>
+                  ) : diagnosedMisconception ? (
+                    <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs space-y-2 animate-in fade-in duration-300">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 font-bold text-purple-700 dark:text-purple-300">
+                          <Brain className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                          <span>AI Misconception Diagnostic</span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-700 dark:text-purple-300 font-semibold text-[10px]">
+                          {diagnosedMisconception.conceptName}
+                        </span>
+                      </div>
+
+                      <div className="text-foreground/90 space-y-1">
+                        <p>
+                          <span className="font-semibold text-rose-600 dark:text-rose-400">
+                            Why you likely chose this:{" "}
+                          </span>
+                          {diagnosedMisconception.misconception}
+                        </p>
+                      </div>
+
+                      <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 font-medium">
+                        💡 <span className="font-bold">Core Takeaway: </span>
+                        {diagnosedMisconception.remediation}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>
