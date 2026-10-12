@@ -7,6 +7,7 @@ from typing import Optional
 from langchain_core.prompts import ChatPromptTemplate
 from src.services.supabase_service import supabase_service
 from src.utils.model_router import call_with_fallback, stream_with_fallback
+from src.services.guardrail_service import evaluate_rag_triad, RAGTriadScore
 
 # Doubt Solver route
 # Primary model: Groq Llama 3  |  Fallback: Gemini Flash
@@ -15,6 +16,7 @@ from src.utils.model_router import call_with_fallback, stream_with_fallback
 #   2. KaTeX LaTeX formulas
 #   3. Socratic guided tutoring & 3-tier progressive hint scaffolding
 #   4. Server-Sent Events (SSE) real-time token streaming
+#   5. Hallucination Guardrails & RAG Triad Self-Reflection Critic
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +47,7 @@ class DoubtResponse(BaseModel):
     mode: str = "direct"
     hint_tier: Optional[int] = None
     probing_question: Optional[str] = None
+    guardrail: Optional[RAGTriadScore] = None
 
 
 async def _prepare_doubt_context(request: DoubtRequest):
@@ -235,17 +238,17 @@ Rules:
         "question": request.question,
     }
 
-    return prompt_template, input_data, citations, rag_grounded
+    return prompt_template, input_data, citations, rag_grounded, rag_context
 
 
 @router.post("/ask", response_model=DoubtResponse)
 async def ask_doubt(request: DoubtRequest):
     """
-    AI Doubt Solver: Answers a student's question synchronously.
+    AI Doubt Solver: Answers a student's question synchronously with RAG Triad verification.
     Primary: Groq Llama 3 | Fallback: Gemini Flash
     """
     try:
-        prompt_template, input_data, citations, rag_grounded = await _prepare_doubt_context(request)
+        prompt_template, input_data, citations, rag_grounded, rag_context = await _prepare_doubt_context(request)
 
         response = call_with_fallback(
             task="chat",
@@ -256,6 +259,9 @@ async def ask_doubt(request: DoubtRequest):
         )
 
         answer_text = response.content if hasattr(response, "content") else str(response)
+
+        # RAG Triad & Hallucination Guardrail Check
+        guardrail = await evaluate_rag_triad(request.question, rag_context, answer_text)
 
         # Save to database
         try:
@@ -284,6 +290,7 @@ async def ask_doubt(request: DoubtRequest):
             rag_grounded=rag_grounded,
             mode=request.mode or "direct",
             hint_tier=request.hint_tier,
+            guardrail=guardrail,
         )
 
     except HTTPException:
@@ -296,11 +303,11 @@ async def ask_doubt(request: DoubtRequest):
 @router.post("/stream")
 async def stream_doubt(request: DoubtRequest):
     """
-    AI Doubt Solver: Real-time Server-Sent Events (SSE) token streaming.
+    AI Doubt Solver: Real-time Server-Sent Events (SSE) token streaming with RAG Triad Guardrail verification.
     Streams tokens chunk-by-chunk for an immediate, responsive UI typing experience.
     """
     try:
-        prompt_template, input_data, citations, rag_grounded = await _prepare_doubt_context(request)
+        prompt_template, input_data, citations, rag_grounded, rag_context = await _prepare_doubt_context(request)
 
         async def sse_generator():
             # 1. Start event
@@ -338,9 +345,13 @@ async def stream_doubt(request: DoubtRequest):
                 except Exception as db_err:
                     logger.warning(f"Failed to save streamed doubt messages: {db_err}")
 
-                # 4. Completion event with citations
+                # 4. RAG Triad Guardrail Evaluation
+                guardrail = await evaluate_rag_triad(request.question, rag_context, full_text)
+                yield f"data: {json.dumps({'type': 'guardrail', 'guardrail': guardrail.model_dump()})}\n\n"
+
+                # 5. Completion event with citations and guardrail
                 citations_payload = [c.model_dump() for c in citations]
-                yield f"data: {json.dumps({'type': 'done', 'citations': citations_payload, 'rag_grounded': rag_grounded, 'mode': request.mode or 'direct', 'hint_tier': request.hint_tier, 'full_text': full_text})}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'citations': citations_payload, 'rag_grounded': rag_grounded, 'mode': request.mode or 'direct', 'hint_tier': request.hint_tier, 'full_text': full_text, 'guardrail': guardrail.model_dump()})}\n\n"
 
             except Exception as stream_err:
                 logger.error(f"Error during SSE stream: {stream_err}")

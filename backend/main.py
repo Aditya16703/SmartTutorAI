@@ -19,6 +19,7 @@ from src.api.routes.workflow import router as workflow_router
 from src.api.routes.doubt import router as doubt_router
 from src.api.routes.orchestrator import router as orchestrator_router
 from src.api.routes.mastery import router as mastery_router
+from src.api.routes.vision import router as vision_router
 
 app = FastAPI(
     title="Educational AI Agent Backend",
@@ -40,6 +41,7 @@ app.include_router(workflow_router, prefix="/api/workflows", tags=["workflow"])
 app.include_router(doubt_router, prefix="/api/doubt", tags=["doubt"])
 app.include_router(orchestrator_router, prefix="/api/orchestrator", tags=["orchestrator"])
 app.include_router(mastery_router, prefix="/api/mastery", tags=["mastery"])
+app.include_router(vision_router, prefix="/api/vision", tags=["vision"])
 
 @app.get("/")
 async def root():
