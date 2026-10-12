@@ -4,34 +4,31 @@ import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Brain,
-  CheckCircle2,
   AlertTriangle,
   Clock,
-  Sparkles,
   Flame,
-  ArrowUpRight,
   RefreshCw,
 } from "lucide-react";
 
 interface ConceptRecord {
   id?: string;
   concept_name: string;
-  mastery_score: number;
-  attempts_count: number;
-  correct_count: number;
-  status: "struggling" | "developing" | "mastered";
-  misconceptions: string[];
-  interval_days: number;
-  next_review_at: string;
+  mastery_score?: number;
+  attempts_count?: number;
+  correct_count?: number;
+  status?: "struggling" | "developing" | "mastered" | string;
+  misconceptions?: string[] | null;
+  interval_days?: number;
+  next_review_at?: string | null;
 }
 
 interface MasteryBreakdown {
-  concepts: ConceptRecord[];
-  overall_score: number;
-  struggling_count: number;
-  developing_count: number;
-  mastered_count: number;
-  needs_review_count: number;
+  concepts?: ConceptRecord[];
+  overall_score?: number;
+  struggling_count?: number;
+  developing_count?: number;
+  mastered_count?: number;
+  needs_review_count?: number;
 }
 
 interface ConceptMasteryProps {
@@ -47,6 +44,11 @@ export default function ConceptMastery({
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchMastery = async () => {
+    if (!learningSpaceId || !userId) {
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setIsLoading(true);
       const agentApi =
@@ -56,7 +58,7 @@ export default function ConceptMastery({
       );
       if (res.ok) {
         const json = await res.json();
-        if (json.success) {
+        if (json.success && json.data) {
           setData(json.data);
         }
       }
@@ -72,6 +74,7 @@ export default function ConceptMastery({
   }, [learningSpaceId, userId]);
 
   const percentage = Math.round((data?.overall_score ?? 0.5) * 100);
+  const conceptsList = Array.isArray(data?.concepts) ? data!.concepts! : [];
 
   return (
     <Card className="bg-card border-border shadow-sm overflow-hidden">
@@ -148,7 +151,7 @@ export default function ConceptMastery({
           <div className="py-6 text-center text-xs text-muted-foreground">
             Analyzing student knowledge telemetry...
           </div>
-        ) : !data || data.concepts.length === 0 ? (
+        ) : conceptsList.length === 0 ? (
           <div className="py-6 text-center text-xs text-muted-foreground space-y-1">
             <p className="font-medium text-foreground">
               No concept data recorded yet
@@ -160,14 +163,15 @@ export default function ConceptMastery({
           </div>
         ) : (
           <div className="space-y-2.5">
-            {data.concepts.map((concept, idx) => {
-              const scorePct = Math.round(concept.mastery_score * 100);
-              const isDue =
-                new Date(concept.next_review_at) <= new Date();
+            {conceptsList.map((concept, idx) => {
+              const scorePct = Math.round((concept.mastery_score ?? 0.5) * 100);
+              const isDue = concept.next_review_at
+                ? new Date(concept.next_review_at) <= new Date()
+                : false;
 
               return (
                 <div
-                  key={idx}
+                  key={concept.id || idx}
                   className="p-3 rounded-lg border border-border bg-card/50 hover:bg-muted/30 transition-all space-y-2"
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -196,7 +200,7 @@ export default function ConceptMastery({
                         <span>Score: {scorePct}%</span>
                         <span>•</span>
                         <span>
-                          {concept.correct_count}/{concept.attempts_count} correct
+                          {concept.correct_count ?? 0}/{concept.attempts_count ?? 0} correct
                         </span>
                         {isDue && (
                           <>
@@ -226,7 +230,7 @@ export default function ConceptMastery({
                   </div>
 
                   {/* Diagnosed Misconception Notice */}
-                  {concept.misconceptions && concept.misconceptions.length > 0 && (
+                  {Array.isArray(concept.misconceptions) && concept.misconceptions.length > 0 && (
                     <div className="p-2 rounded-md bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-300 text-xs flex items-start gap-1.5">
                       <AlertTriangle className="w-3.5 h-3.5 text-rose-500 flex-shrink-0 mt-0.5" />
                       <div>
