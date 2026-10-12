@@ -55,6 +55,9 @@ async def _prepare_doubt_context(request: DoubtRequest):
     Common context preparation pipeline for both synchronous and streaming doubt solving.
     Handles student profile, multi-turn history, hybrid RAG retrieval, and Socratic prompts.
     """
+    if not request.question or not request.question.strip():
+        raise HTTPException(status_code=400, detail="Question cannot be empty.")
+
     # 1. Fetch learning space data
     learning_space = supabase_service.get_learning_space(request.learning_space_id)
     if not learning_space:
