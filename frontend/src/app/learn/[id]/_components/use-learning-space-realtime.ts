@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/utils/supabase/client";
 
 interface RealtimeUpdate {
-  summary_notes?: unknown;
+  summary_notes?: string | null;
   recommendations?: unknown;
   audio_script?: string;
   quiz?: unknown;

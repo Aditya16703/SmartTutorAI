@@ -17,9 +17,11 @@ interface LearningSpace {
   flashcards?: unknown | null;
   recommendations?: unknown | null;
   quiz?: unknown | null;
-  audio_overview?: unknown | null;
+  audio_overview?: string | null;
   file_url?: string | null;
   language?: string;
+  pdf_source?: string;
+  audio_source?: string;
 }
 
 interface User {
@@ -68,11 +70,15 @@ export default function LearningSpaceContent({
 
 function MainGrid({ learningSpace, user }: { learningSpace: LearningSpace; user: User }) {
   // Safe data access helper
-  const getSafeData = (data: LearningSpace, key: keyof LearningSpace, fallback: unknown = null) => {
-    return data && data[key] !== undefined ? data[key] : fallback;
+  const getSafeData = <K extends keyof LearningSpace>(
+    data: LearningSpace,
+    key: K,
+    fallback?: LearningSpace[K]
+  ): LearningSpace[K] => {
+    return data && data[key] !== undefined ? data[key] : (fallback as LearningSpace[K]);
   };
 
-  const language = getSafeData(learningSpace, "language", "English");
+  const language = getSafeData(learningSpace, "language", "English") || "English";
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
@@ -113,7 +119,7 @@ function MainGrid({ learningSpace, user }: { learningSpace: LearningSpace; user:
         <AudioOverview
           learningSpaceId={learningSpace.id}
           userId={user.id}
-          audio_overview={getSafeData(learningSpace, "audio_overview")}
+          audio_overview={getSafeData(learningSpace, "audio_overview") ?? null}
           language={language}
         />
 
